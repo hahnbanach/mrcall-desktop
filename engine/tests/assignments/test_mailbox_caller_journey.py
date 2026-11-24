@@ -1,5 +1,6 @@
 """Public caller integration: one provider object, native edits and durable replay."""
 import asyncio
+from hashlib import sha256
 from email import policy
 from email.parser import BytesParser
 from types import SimpleNamespace
@@ -21,16 +22,20 @@ def parsed(raw):
 
 
 class NativeMailbox:
-    """Provider boundary with stable native IDs and editable saved RFC messages."""
-    drafts, delivered, trash, creates, transmissions = {}, [], {}, 0, 0
+    """IMAP boundary: edits replace messages and SMTP leaves retirement separate."""
+    drafts, delivered, trash, creates, transmissions, updates = {}, [], {}, 0, 0, 0
     def __init__(self, owner):
         assert owner == OWNER
     def close(self):
         pass
     def list_drafts(self):
-        return list(self.drafts.values())
+        return [self.get_draft(identifier) for identifier in self.drafts]
     def get_draft(self, identifier):
-        return self.drafts.get(identifier)
+        row = self.drafts.get(identifier)
+        if row is None:
+            return None
+        return {**row, "identity": {"id": identifier, "message_id": row["message_id"],
+                                   "raw_sha256": sha256(row["raw"]).hexdigest()}}
     def find_drafts(self, message_id):
         return [row for row in self.drafts.values() if str(parsed(row["raw"])["Message-ID"]) == message_id]
     def thread_for_message(self, target):
@@ -42,29 +47,46 @@ class NativeMailbox:
             "thread_id": thread_id or "native-thread", "raw": raw}
         return self.drafts[identifier]
     def update_draft(self, identifier, raw, **kwargs):
-        self.drafts[identifier]["raw"] = raw
-        return self.drafts[identifier]
-    def send_draft(self, identifier, raw):
+        old = self.drafts.pop(identifier)
+        self.trash[identifier] = old
+        type(self).updates += 1
+        new_id = "draft-replacement-" + str(self.updates)
+        self.drafts[new_id] = {**old, "id": new_id, "message_id": "message-" + new_id, "raw": raw}
+        return self.get_draft(new_id)
+    def external_replace(self, identifier, raw):
+        old = self.drafts.pop(identifier)
+        type(self).updates += 1
+        new_id = "external-replacement-" + str(self.updates)
+        self.drafts[new_id] = {**old, "id": new_id, "message_id": "message-" + new_id, "raw": raw}
+        return self.get_draft(new_id)
+    def send_draft(self, identifier, raw, **kwargs):
         assert identifier in self.drafts
         type(self).transmissions += 1
         self.delivered.append(raw)
-        self.drafts.pop(identifier)
         return {"id": "sent-message"}
     def sent(self, message_id):
         return [{"message_id": "sent-message", "raw": raw, "labels": ["SENT"]}
             for raw in self.delivered if str(parsed(raw)["Message-ID"]) == message_id]
-    def trash_draft(self, identifier):
+    def trash_draft(self, identifier, **kwargs):
         row = self.drafts.pop(identifier)
         self.trash[identifier] = row
-        return {"id": row["message_id"], "labels": ["TRASH"]}
+        return {"ok": True, "id": row["message_id"], "labels": ["TRASH"], "state": "trashed"}
+    def retire_sent_draft(self, identifier, **kwargs):
+        if identifier not in self.drafts:
+            return {"ok": True, "state": "absent"}
+        return self.trash_draft(identifier, **kwargs)
+    def recover_trash(self, identity):
+        row = self.trash.get(identity["id"])
+        return {"ok": row is not None and identity["id"] not in self.drafts,
+                "state": "trashed"}
 
 
 @pytest.fixture
 def journey(env, monkeypatch):
     mail = mail_fixture.__wrapped__(env, monkeypatch)
     NativeMailbox.drafts, NativeMailbox.delivered, NativeMailbox.trash = {}, [], {}
-    NativeMailbox.creates = NativeMailbox.transmissions = 0
-    monkeypatch.setattr("zylch.email.gmail_mailbox.GmailMailbox", NativeMailbox)
+    NativeMailbox.creates = NativeMailbox.transmissions = NativeMailbox.updates = 0
+    monkeypatch.setattr("zylch.email.imap_mailbox.IMAPMailbox", NativeMailbox)
     calls = []
     async def generate(context, request):
         calls.append(request)
@@ -83,9 +105,13 @@ def test_mcp_native_edit_send_replay_and_no_private_draft(journey):
     result = prepare(journey)
     draft_id = result["result"]["draft_id"]
     native = next(iter(NativeMailbox.drafts.values()))
-    native["raw"] = build(OWNER, to=["edited-recipient@example.test"], subject="Edited subject",
+    edited_raw = build(OWNER, to=["edited-recipient@example.test"], subject="Edited subject",
         body="Saved by the person in Gmail.", in_reply_to=ROOT,
         references=[ROOT], message_id="<native-web-save@example.test>")
+    NativeMailbox(OWNER).external_replace(native["id"], edited_raw)
+    current = Storage.get_instance().list_drafts(OWNER)
+    assert len(current) == 1 and current[0]["id"] != draft_id
+    draft_id = current[0]["id"]
     outcome = asyncio.run(journey.effects.send("token", "mailbox-send-key-0000001", draft_id))
     assert outcome["ok"] and outcome["state"] == "sent"
     received = parsed(NativeMailbox.delivered[0])
@@ -99,7 +125,7 @@ def test_mcp_native_edit_send_replay_and_no_private_draft(journey):
     with db.get_session() as session:
         assert session.query(Draft).count() == 0
     replay = prepare(journey)
-    assert replay["result"]["draft_id"] == draft_id
+    assert replay["result"]["draft_id"] == result["result"]["draft_id"]
     assert replay["current_draft"] == {"exists": False}
     assert len(journey.calls) == 1 and NativeMailbox.creates == 1
 
@@ -193,19 +219,23 @@ def test_scheduled_existing_draft_precedes_generation(env, journey, monkeypatch)
     assert NativeMailbox.creates == 1 and NativeMailbox.transmissions == 0 and not journey.calls
 
 
-def test_missing_native_authorization_is_explicit_not_empty_inventory(env):
+def test_missing_imap_credentials_is_explicit_not_empty_inventory(env, monkeypatch):
     import json
     from zylch.rpc.dispatch import dispatch_raw
     from zylch.services.mailbox_draft_mime import handle
+    from zylch.email.mailbox_errors import MailboxProviderError
+    def unavailable(owner):
+        raise MailboxProviderError("imap_authentication_failed", non_dispatch=True)
+    monkeypatch.setattr("zylch.email.imap_mailbox.IMAPMailbox", unavailable)
     async def invoke(method, params):
         return await dispatch_raw(json.dumps({"jsonrpc": "2.0", "id": 1,
             "method": method, "params": params}), lambda *args: None)
     listing = asyncio.run(invoke("drafts.list", {}))
     assert listing["error"]["code"] == -32030
-    assert "gmail_authorization_required" in listing["error"]["message"]
+    assert "imap_authentication_failed" in listing["error"]["message"]
     reading = asyncio.run(invoke("drafts.get", {"draft_id": handle(OWNER, "native-missing")}))
     assert reading["result"]["ok"] is False
-    assert reading["result"]["cause"] == "gmail_authorization_required"
+    assert reading["result"]["cause"] == "imap_authentication_failed"
 
 
 def task_agent(draft_id, approval):
@@ -310,7 +340,7 @@ def test_actual_chat_gate_drops_unchanged_hydrated_fields(journey, monkeypatch, 
 
 @pytest.mark.parametrize("route", ["task", "chat", "slash"])
 def test_new_explicit_attempt_recovers_after_definite_provider_refusal(journey, monkeypatch, route):
-    from zylch.email.gmail_auth import GmailError
+    from zylch.email.mailbox_errors import MailboxProviderError
     from zylch.tools.gmail_tools import SendDraftTool
     from zylch.services.command_handlers import handle_email
     draft = ordinary_draft()
@@ -326,7 +356,7 @@ def test_new_explicit_attempt_recovers_after_definite_provider_refusal(journey, 
         return asyncio.run(handle_email(["send", draft["id"]], None, OWNER))
     original = NativeMailbox.send_draft
     def denied(*args, **kwargs):
-        error = GmailError("gmail_provider_refused", 403)
+        error = MailboxProviderError("smtp_recipient_refused", non_dispatch=True)
         error.non_dispatch = True
         raise error
     monkeypatch.setattr(NativeMailbox, "send_draft", denied)
@@ -341,7 +371,7 @@ def test_new_explicit_attempt_recovers_after_definite_provider_refusal(journey, 
 
 @pytest.mark.parametrize("route", ["storage", "slash"])
 def test_explicit_delete_retries_definite_refusal_and_preserves_uncertain_operation(journey, monkeypatch, route):
-    from zylch.email.gmail_auth import GmailError
+    from zylch.email.mailbox_errors import MailboxProviderError
     from zylch.services.command_handlers import handle_email
     draft = ordinary_draft()
     mutations = []
@@ -351,15 +381,15 @@ def test_explicit_delete_retries_definite_refusal_and_preserves_uncertain_operat
             return Storage.get_instance().delete_draft(OWNER, draft["id"])
         return asyncio.run(handle_email(["delete", draft["id"]], None, OWNER))
     def denied(*args, **kwargs):
-        error = GmailError("gmail_provider_refused", 403)
+        error = MailboxProviderError("smtp_recipient_refused", non_dispatch=True)
         error.non_dispatch = True
         raise error
     monkeypatch.setattr(NativeMailbox, "trash_draft", denied)
     invoke()
     assert len(NativeMailbox.drafts) == 1 and not NativeMailbox.trash
-    def lost(self, identifier):
+    def lost(self, identifier, **kwargs):
         mutations.append(identifier)
-        original(self, identifier)
+        original(self, identifier, **kwargs)
         raise RuntimeError("Synthetic acknowledgement loss")
     def observed(self, message_id):
         rows = list(self.trash.values())
@@ -411,7 +441,8 @@ def test_emailer_explicit_modification_updates_same_native_draft_and_surfaces_fa
     draft = ordinary_draft()
     changed = agent._process_write_email({"to": "edited@example.test", "subject": "Changed", "body": "Requested edit"},
         SimpleNamespace(source_emails=[]), existing_draft_id=draft["id"])
-    assert changed["draft_id"] == draft["id"] and changed["body"].strip() == "Requested edit"
+    assert changed["draft_id"] != draft["id"] and changed["body"].strip() == "Requested edit"
+    assert Storage.get_instance().get_draft(OWNER, draft["id"]) is None
     assert NativeMailbox.creates == 1
     def failure(*args, **kwargs):
         raise RuntimeError("Synthetic provider failure")

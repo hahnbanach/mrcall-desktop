@@ -2754,9 +2754,3 @@ for _name, _fn in _DIAGNOSTIC_METHODS.items():
     if _name in METHODS:
         raise RuntimeError(f"Duplicate RPC method name: {_name}")
     METHODS[_name] = _fn
-
-from zylch.rpc.google_gmail_actions import METHODS as _GOOGLE_GMAIL_METHODS
-for _name, _fn in _GOOGLE_GMAIL_METHODS.items():
-    if _name in METHODS:
-        raise RuntimeError(f"Duplicate RPC method name: {_name}")
-    METHODS[_name] = _fn

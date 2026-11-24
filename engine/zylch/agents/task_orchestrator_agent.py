@@ -460,6 +460,7 @@ The sub-agents can handle multi-step workflows. Give them the full picture.
                         **{aliases.get(key, key): value for key, value in updates.items()})
                     if current is None:
                         return f"Draft not found after approval: {draft_id}. Nothing was sent."
+                    draft_id = current["id"]
                 # Keep only the approved handle and request identity, not another editable draft.
                 remember({"state": "approved", "effect_certainty": "not-dispatched"})
             # A repeated task action resumes the established operation without edits or redispatch.

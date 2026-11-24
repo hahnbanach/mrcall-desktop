@@ -52,5 +52,6 @@ export interface MailboxDraftAPI {
   get: (draftId: string) => Promise<MailboxDraftResult>
   update: (params: MailboxDraftPatch) => Promise<MailboxDraftResult>
   send: (draftId: string, requestKey: string) => Promise<MailboxDraftOutcome>
+  sendStatus: (draftId: string, requestKey: string) => Promise<MailboxDraftOutcome>
   trash: (draftId: string, requestKey: string) => Promise<MailboxDraftOutcome>
 }

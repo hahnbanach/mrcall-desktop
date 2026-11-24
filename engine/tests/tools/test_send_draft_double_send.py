@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from mailbox_tools_fixture import OWNER, cleanup_test_data, mailbox
-from zylch.email.gmail_auth import GmailError
+from zylch.email.mailbox_errors import MailboxProviderError
 from zylch.tools.base import ToolStatus
 
 
@@ -93,10 +93,9 @@ def test_unknown_wire_failure_and_empty_sent_never_authorize_another_transmissio
 
 
 @pytest.mark.parametrize("route", ["tool", "slash"])
-@pytest.mark.parametrize("status", [400, 403])
-def test_definite_provider_refusal_stays_visible_and_new_explicit_attempt_can_retry(mailbox, route, status):
+def test_definite_provider_refusal_stays_visible_and_new_explicit_attempt_can_retry(mailbox, route):
     draft = mailbox.draft()
-    error = GmailError("gmail_provider_refused", status)
+    error = MailboxProviderError("smtp_recipient_refused", non_dispatch=True)
     error.non_dispatch = True
     mailbox.state.refusal = error
     first = send(mailbox, draft, route)
@@ -138,7 +137,7 @@ def test_lost_ack_is_settled_immediately_when_sent_already_proves_delivery(mailb
 
 def test_sent_read_failure_cannot_reclassify_an_accepted_send_as_not_dispatched(mailbox):
     draft = mailbox.draft()
-    error = GmailError("gmail_read_unavailable", 403)
+    error = MailboxProviderError("imap_read_unavailable", non_dispatch=True)
     error.non_dispatch = True  # Even this read error cannot undo an earlier mutation.
     mailbox.state.sent_error = error
     first = send(mailbox, draft)
@@ -168,12 +167,12 @@ def test_receipt_write_failure_after_delivery_never_reopens_dispatch(mailbox, mo
     assert len(mailbox.state.send_calls) == len(mailbox.state.sent_rows) == 1
 
 
-def test_cleanup_of_consumed_draft_cannot_erase_uncertain_send_receipt(mailbox):
+def test_explicit_trash_of_draft_cannot_erase_uncertain_send_receipt(mailbox):
     draft = mailbox.draft()
     mailbox.state.lose_ack, mailbox.state.sent_visible = True, False
     first = send(mailbox, draft)
     assert first.data["state"] == "unconfirmed"
-    assert mailbox.storage.delete_draft(OWNER, draft["id"]) is False
+    assert mailbox.storage.delete_draft(OWNER, draft["id"]) is True
     assert send(mailbox, draft).data["state"] == "unconfirmed"
     mailbox.state.sent_visible = True
     assert send(mailbox, draft).data["message_id"] == first.data["message_id"]
@@ -219,8 +218,9 @@ def test_send_cannot_dispatch_a_draft_while_an_update_is_in_flight(mailbox):
             assert mailbox.state.send_calls == [], "Send must wait until the native update is settled"
         finally:
             release.set()
-        assert updating.result(timeout=5)["body"].strip() == "The approved edit"
-    assert send(mailbox, draft).status is ToolStatus.SUCCESS
+        updated = updating.result(timeout=5)
+        assert updated["body"].strip() == "The approved edit"
+    assert send(mailbox, updated).status is ToolStatus.SUCCESS
     assert mailbox.state.sent_message().get_content().strip() == "The approved edit"
     assert len(mailbox.state.send_calls) == len(mailbox.state.sent_rows) == 1
 
@@ -259,7 +259,9 @@ def test_uncertain_update_fence_survives_storage_reopen_and_original_request_rep
         conn.exec_driver_sql("UPDATE mailbox_operation_receipts SET created_at=0, updated_at=0 WHERE kind='update'")
     db.dispose_engine()
     mailbox.state.update_error = None
-    replay = mailbox.service().update(draft["id"], request_key=key, body="An uncertain edit")
+    with pytest.raises(MailboxDraftError) as error:
+        mailbox.service().update(draft["id"], request_key=key, body="An uncertain edit")
+    replay = error.value.details["outcome"]
     assert replay["operation_id"] == original["id"] and replay["state"] == "unconfirmed"
     assert send(mailbox, draft).status is ToolStatus.ERROR
     with pytest.raises(MailboxDraftError, match="draft_update_operation_unconfirmed"):

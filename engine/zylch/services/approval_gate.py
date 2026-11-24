@@ -264,6 +264,7 @@ async def gate_slash_command(
             changed = storage.update_draft(owner_id, draft_id, updates)
             if changed is None:
                 return f"Draft not found after approval: {draft_id}. Nothing was sent."
+            args[1] = changed["id"]
         except Exception as e:
             logger.exception("[approval] mailbox card edit failed; send refused")
             return f"Could not save the approved changes to draft {draft_id}: {e}. Nothing was sent."

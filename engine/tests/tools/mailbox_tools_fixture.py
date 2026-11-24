@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from email import policy
 from email.parser import BytesParser
+from hashlib import sha256
 from threading import RLock
 
 import pytest
@@ -70,7 +71,8 @@ class NativeClient:
     def get_draft(self, identifier):
         with self.state.lock:
             row = self.state.drafts.get(identifier)
-            return dict(row) if row is not None else None
+            return {**row, "identity": {"id": identifier, "message_id": row["message_id"],
+                "raw_sha256": sha256(row["raw"]).hexdigest()}} if row is not None else None
 
     def find_drafts(self, message_id):
         return [row for row in self.list_drafts() if str(message(row["raw"])["Message-ID"]) == message_id]
@@ -95,10 +97,13 @@ class NativeClient:
         with self.state.lock:
             if self.state.update_error is not None:
                 raise self.state.update_error
-            self.state.drafts[identifier]["raw"] = raw
-            return dict(self.state.drafts[identifier])
+            old = self.state.drafts.pop(identifier)
+            self.state.trashed[old["message_id"]] = {**old, "labels": ["TRASH"]}
+            new_id = "replacement-" + str(len(self.state.update_calls))
+            self.state.drafts[new_id] = {**old, "id": new_id, "message_id": "message-" + new_id, "raw": raw}
+            return self.get_draft(new_id)
 
-    def send_draft(self, identifier, raw):
+    def send_draft(self, identifier, raw, **kwargs):
         with self.state.lock:
             self.state.send_calls.append((identifier, raw))
         if self.state.before_send is not None:
@@ -109,11 +114,10 @@ class NativeClient:
             raise self.state.transport_error
         with self.state.lock:
             if identifier not in self.state.drafts:
-                from zylch.email.gmail_auth import GmailError
-                error = GmailError("gmail_draft_not_found", 404)
+                from zylch.email.mailbox_errors import MailboxProviderError
+                error = MailboxProviderError("named_draft_not_found", non_dispatch=True)
                 error.non_dispatch = True
                 raise error
-            self.state.drafts.pop(identifier)
             row = {"message_id": "native-sent-" + str(len(self.state.sent_rows) + 1),
                    "thread_id": "synthetic-native-thread", "raw": raw, "labels": ["SENT"]}
             self.state.sent_rows.append(row)
@@ -132,13 +136,25 @@ class NativeClient:
             return [dict(row) for row in self.state.sent_rows
                     if str(message(row["raw"])["Message-ID"]) == message_id]
 
-    def trash_draft(self, identifier):
+    def trash_draft(self, identifier, **kwargs):
         with self.state.lock:
             self.state.trash_calls.append(identifier)
             row = self.state.drafts.pop(identifier)
             row["labels"] = ["TRASH"]
             self.state.trashed[row["message_id"]] = row
-            return {"message_id": row["message_id"], "labels": ["TRASH"]}
+            return {"ok": True, "state": "trashed", "message_id": row["message_id"], "labels": ["TRASH"]}
+
+    def retire_sent_draft(self, identifier, **kwargs):
+        with self.state.lock:
+            if identifier not in self.state.drafts:
+                return {"ok": True, "state": "absent"}
+        return self.trash_draft(identifier, **kwargs)
+
+    def recover_trash(self, identity):
+        with self.state.lock:
+            row = self.state.trashed.get(identity["message_id"])
+            return {"ok": row is not None and identity["id"] not in self.state.drafts,
+                    "state": "trashed"}
 
     def get_message(self, message_id):
         with self.state.lock:
@@ -191,6 +207,6 @@ def mailbox(tmp_path, monkeypatch):
     db.dispose_engine()
     db.init_db()
     state = NativeState()
-    monkeypatch.setattr("zylch.email.gmail_mailbox.GmailMailbox", state.client)
+    monkeypatch.setattr("zylch.email.imap_mailbox.IMAPMailbox", state.client)
     yield MailboxFixture(Storage.get_instance(), state, str(tmp_path / "mailbox-tools.db"))
     db.dispose_engine()

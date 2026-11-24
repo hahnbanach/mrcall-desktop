@@ -1,5 +1,6 @@
 """Mailbox draft mutations shared by Desktop, chat and kernel RPC callers."""
 import asyncio
+import hashlib
 
 from .draft_queries import _owner_id, mailbox_call
 
@@ -62,7 +63,8 @@ async def drafts_discard(params, notify):
     """drafts.discard(draft_id, request_key?) -> compatibility alias for mailbox Trash."""
     draft_id = _required(params, "draft_id")
     value = await drafts_trash({"draft_id": draft_id,
-        "request_key": params.get("request_key") or "discard:" + draft_id}, notify)
+        "request_key": params.get("request_key") or
+            "discard:" + hashlib.sha256(draft_id.encode("utf-8")).hexdigest()}, notify)
     return {**value, "discarded": bool(value.get("ok"))}
 
 

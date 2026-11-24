@@ -17,27 +17,31 @@ import {createRoot} from 'react-dom/client'
 import './src/preload/index'
 import Email from './src/renderer/src/views/Email'
 import {ThreadProvider} from './src/renderer/src/store/thread'
-const baseline=()=>({id:'gmail:synthetic-mailbox:draft-1',mailbox_id:'synthetic-mailbox',status:'draft',to:'recipient@example.test',subject:'Synthetic reply',body:'Original body',body_format:'plain',thread_id:'<source@example.test>'})
-let draft=baseline(),present=true,authorized=true,transmissions=0,firstSend=true,failTransport=false,rejected=false
+const baseline=()=>({id:'imap:synthetic-mailbox:draft-1',mailbox_id:'synthetic-mailbox',status:'draft',to:'recipient@example.test',subject:'Synthetic reply',body:'Original body',body_format:'plain',thread_id:'<source@example.test>'})
+let draft=baseline(),present=true,authorized=true,transmissions=0,firstSend=true,failTransport=false,rejected=false,receipt=null,replacements=0
 const calls=[]
 window.fixtureRpc={invoke:async(channel,method,params)=>{
  calls.push({method,params})
  if(method==='mailboxes.list')return {mailboxes:[]}
  if(method==='emails.list_inbox')return {threads:[]}
  if(method==='drafts.list'){
-  if(!authorized)throw Error('gmail_authorization_required')
+  if(!authorized)throw Error('imap_authentication_failed')
   return present?[{...draft}]:[]
  }
- if(method==='drafts.get')return present?{ok:true,draft:{...draft}}:{ok:false,cause:'This draft was sent or deleted in Gmail.'}
+ if(method==='drafts.get')return present&&params.draft_id===draft.id?{ok:true,draft:{...draft}}:{ok:false,cause:'This draft was sent or deleted in Gmail.'}
  if(method==='drafts.update'){
-  if(!present)throw Error('missing draft')
-  const {draft_id,...patch}=params;draft={...draft,...patch};return {ok:true,draft:{...draft}}
+  if(!present||params.draft_id!==draft.id)throw Error('missing draft')
+  const {draft_id,...patch}=params;draft={...draft,...patch,id:'imap:synthetic-mailbox:replacement-'+(++replacements)};return {ok:true,draft:{...draft}}
  }
  if(method==='drafts.send'){
   if(rejected){rejected=false;return {ok:false,state:'held',effect_certainty:'not-dispatched',cause:'Correct the recipient before sending.'}}
-  if(failTransport){failTransport=false;throw Error('Connection interrupted')}
-  if(firstSend){firstSend=false;present=false;transmissions++;return {ok:false,state:'unconfirmed',draft_id:params.draft_id,request_key:params.request_key}}
+  if(failTransport){failTransport=false;firstSend=false;present=false;transmissions++;receipt={...params};throw Error('Connection interrupted')}
+  if(firstSend){firstSend=false;present=false;transmissions++;receipt={...params};return {ok:false,state:'unconfirmed',draft_id:params.draft_id,request_key:params.request_key}}
   present=false;return {ok:true,state:'sent',draft_id:params.draft_id,request_key:params.request_key,message_id:'<sent@example.test>'}
+ }
+ if(method==='drafts.send_status'){
+  if(!receipt||receipt.request_key!==params.request_key||receipt.draft_id!==params.draft_id)return {ok:false,state:'not_found',effect_certainty:'not-dispatched'}
+  return {ok:false,state:'sent',effect_certainty:'verified',cause:'draft_retirement_unconfirmed',draft_id:params.draft_id,request_key:params.request_key}
  }
  if(method==='drafts.trash'){present=false;return {ok:true,state:'trashed',draft_id:params.draft_id,request_key:params.request_key}}
  throw Error('unexpected RPC: '+method)
@@ -46,8 +50,8 @@ const root=createRoot(document.getElementById('root'))
 let generation=0
 const render=()=>root.render(<ThreadProvider><Email key={generation}/></ThreadProvider>)
 window.fixture={calls:()=>calls,transmissions:()=>transmissions,
- externalEdit:()=>{draft={...draft,to:'edited@example.test',body:'Saved in Gmail'}},
- reset:()=>{draft=baseline();present=true;firstSend=true;generation++;render()},
+ externalEdit:()=>{draft={...draft,id:'imap:synthetic-mailbox:external-'+(++replacements),to:'edited@example.test',body:'Saved in Gmail'}},
+ reset:()=>{draft=baseline();present=true;firstSend=true;receipt=null;replacements=0;generation++;render()},
  remount:()=>{generation++;render()},
  missing:()=>{present=false},
  attach:()=>{draft={...draft,attachments:[{filename:'synthetic.pdf'}]}},
@@ -86,6 +90,10 @@ try {
   await folder()
   await page.evaluate(()=>window.fixture.externalEdit())
   await open()
+  await page.getByRole('alert').filter({hasText:'sent or deleted in Gmail'}).waitFor()
+  assert.equal(await page.getByRole('button',{name:'Send draft',exact:true}).count(),0)
+  await page.getByRole('button',{name:'Back to drafts',exact:true}).click()
+  await open()
   await page.getByText('Saved in Gmail',{exact:true}).waitFor()
   await page.getByText('edited@example.test',{exact:true}).waitFor()
   await page.getByRole('button',{name:'Edit draft',exact:true}).click()
@@ -93,7 +101,7 @@ try {
   await page.getByRole('button',{name:'Save draft',exact:true}).click()
   await page.getByRole('heading',{name:'Edited in Desktop',exact:true}).waitFor()
   const updates=await page.evaluate(()=>window.fixture.calls().filter(row=>row.method==='drafts.update'))
-  assert.deepEqual(updates[0].params,{draft_id:'gmail:synthetic-mailbox:draft-1',subject:'Edited in Desktop'})
+  assert.deepEqual(updates[0].params,{draft_id:'imap:synthetic-mailbox:external-1',subject:'Edited in Desktop'})
   await page.getByRole('button',{name:'Send draft',exact:true}).click()
   await page.getByRole('button',{name:'Check send',exact:true}).waitFor()
   assert.equal(await page.getByRole('button',{name:'Edit draft',exact:true}).isDisabled(),true)
@@ -103,6 +111,10 @@ try {
   assert.equal(await page.locator('[data-draft-id]').count(),0)
   await page.getByRole('button',{name:'Review pending send',exact:true}).click()
   await page.getByRole('button',{name:'Check send',exact:true}).click()
+  await page.getByText('Sent mail is confirmed. Remove the original draft to finish.',{exact:true}).waitFor()
+  assert.equal((await page.evaluate(()=>window.fixture.calls().filter(row=>row.method==='drafts.send_status'))).length,1)
+  assert.equal((await page.evaluate(()=>window.fixture.calls().filter(row=>row.method==='drafts.send'))).length,1)
+  await page.getByRole('button',{name:'Remove sent draft',exact:true}).click()
   await page.getByText('Sent. Confirmed in Sent mail.',{exact:true}).waitFor()
   const sends=await page.evaluate(()=>window.fixture.calls().filter(row=>row.method==='drafts.send'))
   assert.deepEqual(sends[1].params,first)
@@ -122,7 +134,7 @@ try {
   assert.equal(await page.locator('[data-draft-id]').count(),0)
   await page.evaluate(()=>{window.fixture.reset();window.fixture.auth(false)})
   await folder()
-  await page.getByRole('alert').filter({hasText:'Connect this mailbox to Gmail'}).waitFor()
+  await page.getByRole('alert').filter({hasText:'Check this mailbox’s email connection settings'}).waitFor()
   await page.evaluate(()=>window.fixture.auth(true))
   await page.getByRole('button',{name:'Refresh drafts',exact:true}).click()
   await page.locator('[data-draft-id]').first().waitFor()
@@ -136,14 +148,14 @@ try {
   await page.getByRole('button',{name:'Send draft',exact:true}).click()
   await page.getByText('Connection interrupted',{exact:true}).waitFor()
   await page.getByRole('button',{name:'Check send',exact:true}).click()
-  await page.getByText('Sending is not confirmed. Check again to retrieve the result of the same send.',{exact:true}).waitFor()
-  await page.getByRole('button',{name:'Check send',exact:true}).click()
+  await page.getByText('Sent mail is confirmed. Remove the original draft to finish.',{exact:true}).waitFor()
+  await page.getByRole('button',{name:'Remove sent draft',exact:true}).click()
   await page.getByText('Sent. Confirmed in Sent mail.',{exact:true}).waitFor()
-  const retryKeys=await page.evaluate(()=>window.fixture.calls().filter(row=>row.method==='drafts.send').slice(-3).map(row=>row.params.request_key))
+  const retryKeys=await page.evaluate(()=>window.fixture.calls().filter(row=>row.method==='drafts.send'||row.method==='drafts.send_status').slice(-3).map(row=>row.params.request_key))
   assert.equal(new Set(retryKeys).size,1)
   assert.equal(await page.evaluate(()=>window.fixture.transmissions()),2)
   assert.deepEqual(errors,[])
-  console.log('PASS: actual Email view and preload in Chromium: mailbox list/open, Gmail edit readback, sparse save, uncertain send key across remount, one simulated transmission per request, external removal without replacement, attachment preservation, Trash, authorization recovery, definite refusal and transport-loss retry. Provider/RPC are synthetic. Artifacts:',output)
+  console.log('PASS: actual Email view and preload in Chromium: mailbox list/open, stale UID refusal and fresh Gmail edit readback, sparse save with new UID adoption, read-only send status plus explicit original-draft removal, uncertain send key across remount, one simulated transmission per request, external removal without replacement, attachment preservation, Trash, authorization recovery, definite refusal and transport-loss retry. Provider/RPC are synthetic. Artifacts:',output)
 } finally {
   await browser.close()
   await new Promise(done=>server.close(done))

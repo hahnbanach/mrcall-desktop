@@ -4,9 +4,7 @@ Uses Fernet symmetric encryption (AES-128-CBC with HMAC).
 
 Local engine (stdio sidecar): the key comes from ``ENCRYPTION_KEY`` in the
 environment or the profile ``.env``; without one, values are stored and
-returned as they are (fail open for availability), as before. Gmail credentials
-and pending Gmail PKCE state use strict encryption and decryption and refuse that
-fallback.
+returned as they are (fail open for availability), as before.
 
 Hosted engine (``zylch serve``, ``runtime.is_serving()``): the key must be
 in the environment (the unit's ``EnvironmentFile``); the ``.env`` and
@@ -124,34 +122,6 @@ def encrypt(plaintext: str) -> str:
     except Exception as e:
         logger.error(f"Encryption failed: {e}")
         return plaintext  # Fail open for availability
-
-
-
-def encrypt_required(plaintext: str) -> str:
-    try:
-        fernet = _get_fernet()
-        if fernet is None or not isinstance(plaintext, str):
-            raise EncryptionUnavailable("credential encryption required")
-        encoded = plaintext.encode()
-        encrypted = fernet.encrypt(encoded)
-        result = encrypted.decode()
-        if not is_encrypted(result) or fernet.decrypt(encrypted) != encoded:
-            raise EncryptionUnavailable("credential encryption required")
-        return result
-    except Exception:
-        raise EncryptionUnavailable("credential encryption required") from None
-
-
-
-def decrypt_required(ciphertext: str) -> str:
-    try:
-        fernet = _get_fernet()
-        if fernet is None or not isinstance(ciphertext, str) or not is_encrypted(ciphertext):
-            raise EncryptionUnavailable("credential encryption required")
-        return fernet.decrypt(ciphertext.encode()).decode()
-    except Exception:
-        raise EncryptionUnavailable("credential encryption required") from None
-
 
 def decrypt(ciphertext: str) -> str:
     """Decrypt a string.

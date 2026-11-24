@@ -10,10 +10,10 @@ def _owner_id():
 async def mailbox_call(method, *args, **kwargs):
     """Return technical provider refusals as results, preserving uncertain receipts."""
     from zylch.services.mailbox_drafts import MailboxDraftError
-    from zylch.email.gmail_auth import GmailError
+    from zylch.email.mailbox_errors import MailboxProviderError
     try:
         return await asyncio.to_thread(method, *args, **kwargs)
-    except (MailboxDraftError, GmailError) as error:
+    except (MailboxDraftError, MailboxProviderError) as error:
         details = getattr(error, "details", {})
         cause = getattr(error, "cause", None) or getattr(error, "reason", None) or "mailbox_provider_unavailable"
         outcome = details.get("outcome")

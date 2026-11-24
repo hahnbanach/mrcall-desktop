@@ -1,7 +1,7 @@
 {
   "version": 1,
   "source_sha256": {
-    "preload": "8bd6d88b6fe6934b80d78179b29425133694313256f70fdb57349c9585f311cf",
+    "preload": "363c277b5dccdb194ef816fc6c30c400105c47957e41f04302ac9e4ef7bb156e",
     "renderer": "061d86212103d2ea4c4fc3450aaf190adfa84fc0818a87d152bff7433afc18c7",
     "finance": "85643cf1d0e4848ca801c5d177ef50451ad043ea86e25c8c16039e2bf246db6e"
   },
@@ -532,38 +532,6 @@
       "accepted": [],
       "required": [],
       "declared_return": "{connected, signed_in, email?}",
-      "open": false
-    },
-    "google.gmail.begin": {
-      "accepted": [
-        "redirect_uri"
-      ],
-      "required": [],
-      "declared_return": "{auth_url, state, redirect_uri, expires_in}.",
-      "open": false
-    },
-    "google.gmail.complete": {
-      "accepted": [
-        "code",
-        "state"
-      ],
-      "required": [
-        "code",
-        "state"
-      ],
-      "declared_return": "{ok, email, scope}.",
-      "open": false
-    },
-    "google.gmail.disconnect": {
-      "accepted": [],
-      "required": [],
-      "declared_return": "{ok}.",
-      "open": false
-    },
-    "google.gmail.status": {
-      "accepted": [],
-      "required": [],
-      "declared_return": "{connected, email?, scope?, reason?}.",
       "open": false
     },
     "instructions.preview": {
@@ -1864,6 +1832,20 @@
     },
     {
       "line": 176,
+      "method": "drafts.send_status",
+      "payload_keys": [
+        "draft_id",
+        "request_key"
+      ],
+      "guaranteed_keys": [
+        "draft_id",
+        "request_key"
+      ],
+      "dynamic_payload": false,
+      "declared_return": "Promise<MailboxDraftOutcome>"
+    },
+    {
+      "line": 178,
       "method": "drafts.trash",
       "payload_keys": [
         "draft_id",
@@ -1877,7 +1859,7 @@
       "declared_return": "Promise<MailboxDraftOutcome>"
     },
     {
-      "line": 179,
+      "line": 181,
       "method": "system.capabilities",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1885,7 +1867,7 @@
       "declared_return": "Promise<{ chat_history_binding?: number | undefined; }>"
     },
     {
-      "line": 182,
+      "line": 184,
       "method": "stripe.status",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1893,7 +1875,7 @@
       "declared_return": "Promise<StripeStatus>"
     },
     {
-      "line": 183,
+      "line": 185,
       "method": "stripe.test",
       "payload_keys": [
         "api_key"
@@ -1905,7 +1887,7 @@
       "declared_return": "Promise<StripeTestResult>"
     },
     {
-      "line": 184,
+      "line": 186,
       "method": "stripe.connect",
       "payload_keys": [
         "api_key",
@@ -1921,7 +1903,7 @@
       "declared_return": "Promise<StripeStatus>"
     },
     {
-      "line": 185,
+      "line": 187,
       "method": "stripe.disconnect",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1929,7 +1911,7 @@
       "declared_return": "Promise<StripeStatus>"
     },
     {
-      "line": 188,
+      "line": 190,
       "method": "qonto.status",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1937,7 +1919,7 @@
       "declared_return": "Promise<{ status: string; generation: number; account_count: number; source_access: boolean; credential_stored: boolean; error?: string | undefined; }>"
     },
     {
-      "line": 193,
+      "line": 195,
       "method": "qonto.test",
       "payload_keys": [
         "api_key",
@@ -1951,7 +1933,7 @@
       "declared_return": "Promise<QontoTestResult>"
     },
     {
-      "line": 195,
+      "line": 197,
       "method": "qonto.connect",
       "payload_keys": [
         "account_ids",
@@ -1973,7 +1955,7 @@
       "declared_return": "Promise<QontoConnectResult>"
     },
     {
-      "line": 196,
+      "line": 198,
       "method": "qonto.sync",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1981,7 +1963,7 @@
       "declared_return": "Promise<QontoSyncResult>"
     },
     {
-      "line": 197,
+      "line": 199,
       "method": "qonto.disconnect",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -1989,7 +1971,7 @@
       "declared_return": "Promise<QontoRemovalResult>"
     },
     {
-      "line": 198,
+      "line": 200,
       "method": "qonto.delete_imported_data",
       "payload_keys": [
         "confirmed"
@@ -2001,7 +1983,7 @@
       "declared_return": "Promise<QontoRemovalResult>"
     },
     {
-      "line": 199,
+      "line": 201,
       "method": "qonto.prepare",
       "payload_keys": [
         "resume"
@@ -2013,7 +1995,7 @@
       "declared_return": "Promise<{ success?: boolean | undefined; summary?: string | undefined; attempted?: number | undefined; completed?: number | undefined; failed?: number | undefined; errors?: { detail: string; }[] | undefined; }>"
     },
     {
-      "line": 200,
+      "line": 202,
       "method": "qonto.publication_preview",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2021,7 +2003,7 @@
       "declared_return": "Promise<{ preview_id: string; fact_text: string; disclosure: string; }>"
     },
     {
-      "line": 201,
+      "line": 203,
       "method": "qonto.publish",
       "payload_keys": [
         "confirmed",
@@ -2037,7 +2019,7 @@
       "declared_return": "Promise<QontoPublicationResult>"
     },
     {
-      "line": 202,
+      "line": 204,
       "method": "qonto.transaction",
       "payload_keys": [
         "source_id"
@@ -2049,7 +2031,7 @@
       "declared_return": "Promise<QontoTransactionResult>"
     },
     {
-      "line": 204,
+      "line": 206,
       "method": "llm.models",
       "payload_keys": [
         "provider"
@@ -2059,7 +2041,7 @@
       "declared_return": "Promise<{ provider: string; models: { id: string; label: string; provider: string; }[]; available: boolean; reason: string; }>"
     },
     {
-      "line": 206,
+      "line": 208,
       "method": "usage.reconcile",
       "payload_keys": [
         "cursor"
@@ -2069,7 +2051,7 @@
       "declared_return": "Promise<{ recovered: number; unresolved: number; message: string; next_cursor: string | null; }>"
     },
     {
-      "line": 207,
+      "line": 209,
       "method": "usage.today",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2077,7 +2059,7 @@
       "declared_return": "Promise<{ spent_usd: number; budget_usd: number; reserved_usd: number; pricing_fault: boolean; billing_supported: boolean; billing_reason?: string | undefined; model_policy?: { provider: string; preset: string; model: string; roles: Record<string, string>; quality_status: string; credential_configured: boolean; } | undefined; remaining_usd: number; exceeded: boolean; paused: boolean; resets_at: string; calls_today: number; by_site: Record<string, { calls: number; est_usd: number; }>; }>"
     },
     {
-      "line": 225,
+      "line": 227,
       "method": "tasks.list",
       "payload_keys": [
         "include_completed",
@@ -2088,7 +2070,7 @@
       "declared_return": "Promise<any[]>"
     },
     {
-      "line": 227,
+      "line": 229,
       "method": "tasks.complete",
       "payload_keys": [
         "note",
@@ -2102,7 +2084,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 228,
+      "line": 230,
       "method": "tasks.reopen",
       "payload_keys": [
         "task_id"
@@ -2114,7 +2096,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 229,
+      "line": 231,
       "method": "tasks.skip",
       "payload_keys": [
         "task_id"
@@ -2126,7 +2108,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 231,
+      "line": 233,
       "method": "tasks.pin",
       "payload_keys": [
         "pinned",
@@ -2140,7 +2122,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 233,
+      "line": 235,
       "method": "tasks.reanalyze",
       "payload_keys": [
         "task_id"
@@ -2152,7 +2134,7 @@
       "declared_return": "Promise<{ ok: boolean; action: \"kept\" | \"closed\" | \"updated\"; reason: string; task_id: string; usage?: Record<string, unknown> | undefined; }>"
     },
     {
-      "line": 245,
+      "line": 247,
       "method": "tasks.list_by_thread",
       "payload_keys": [
         "thread_id"
@@ -2164,7 +2146,7 @@
       "declared_return": "Promise<any[]>"
     },
     {
-      "line": 252,
+      "line": 254,
       "method": "tasks.dedup_now",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2172,7 +2154,7 @@
       "declared_return": "Promise<{ clusters_examined: number; clusters_with_dups: number; tasks_closed: number; skipped_recently_reopened: number; skipped_oversize: number; no_llm: boolean; }>"
     },
     {
-      "line": 268,
+      "line": 270,
       "method": "tasks.solve",
       "payload_keys": [
         "instructions",
@@ -2186,7 +2168,7 @@
       "declared_return": "Promise<{ ok: boolean; result?: unknown; error?: string | undefined; }>"
     },
     {
-      "line": 277,
+      "line": 279,
       "method": "tasks.solve.approve",
       "payload_keys": [
         "approved",
@@ -2202,7 +2184,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 287,
+      "line": 289,
       "method": "tasks.solve.cancel",
       "payload_keys": [
         "task_id"
@@ -2212,7 +2194,7 @@
       "declared_return": "Promise<{ ok: boolean; task_id?: string | undefined; cancelled_pending?: number | undefined; error?: string | undefined; }>"
     },
     {
-      "line": 295,
+      "line": 297,
       "method": "memory.reconsolidate_now",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2220,7 +2202,7 @@
       "declared_return": "Promise<{ ok: boolean; error?: string | undefined; groups_examined?: number | undefined; blobs_examined?: number | undefined; blobs_merged?: number | undefined; blobs_kept_distinct?: number | undefined; pair_cap_hit?: boolean | undefined; no_llm?: boolean | undefined; skipped?: boolean | undefined; reason?: string | undefined; }>"
     },
     {
-      "line": 313,
+      "line": 315,
       "method": "memory.key_mint",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2228,7 +2210,7 @@
       "declared_return": "Promise<{ key: string; minted: boolean; }>"
     },
     {
-      "line": 315,
+      "line": 317,
       "method": "memory.key_validate",
       "payload_keys": [
         "key"
@@ -2240,7 +2222,7 @@
       "declared_return": "Promise<{ well_formed: boolean; reason: string; }>"
     },
     {
-      "line": 317,
+      "line": 319,
       "method": "memory.status",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2248,7 +2230,7 @@
       "declared_return": "Promise<{ has_key: boolean; available: boolean; reason: string; self_notion?: string | null | undefined; blob_count?: number | undefined; fact_count?: number | undefined; contributors?: string[] | undefined; }>"
     },
     {
-      "line": 327,
+      "line": 329,
       "method": "memory.join_preview",
       "payload_keys": [
         "key"
@@ -2260,7 +2242,7 @@
       "declared_return": "Promise<{ well_formed: boolean; exists: boolean; reason: string; self_notion?: string | null | undefined; blob_count?: number | undefined; fact_count?: number | undefined; contributors?: string[] | undefined; }>"
     },
     {
-      "line": 337,
+      "line": 339,
       "method": "memory.join",
       "payload_keys": [
         "key"
@@ -2272,7 +2254,7 @@
       "declared_return": "Promise<{ ok: boolean; reason?: string | undefined; already?: boolean | undefined; merged?: Record<string, number> | undefined; self_notion?: string | null | undefined; blob_count?: number | undefined; contributors?: string[] | undefined; }>"
     },
     {
-      "line": 356,
+      "line": 358,
       "method": "chat.send",
       "payload_keys": [
         "context",
@@ -2293,7 +2275,7 @@
       "declared_return": "Promise<any>"
     },
     {
-      "line": 388,
+      "line": 390,
       "method": "chat.approve",
       "payload_keys": [
         "approved",
@@ -2308,7 +2290,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 392,
+      "line": 394,
       "method": "preparation.status",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2316,7 +2298,7 @@
       "declared_return": "Promise<any>"
     },
     {
-      "line": 393,
+      "line": 395,
       "method": "preparation.pause",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2324,7 +2306,7 @@
       "declared_return": "Promise<any>"
     },
     {
-      "line": 395,
+      "line": 397,
       "method": "preparation.resume",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2332,7 +2314,7 @@
       "declared_return": "Promise<any>"
     },
     {
-      "line": 397,
+      "line": 399,
       "method": "preparation.reset_failures",
       "payload_keys": [
         "source",
@@ -2346,7 +2328,7 @@
       "declared_return": "Promise<{ reset: boolean; }>"
     },
     {
-      "line": 404,
+      "line": 406,
       "method": "update.run",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2354,7 +2336,7 @@
       "declared_return": "Promise<any>"
     },
     {
-      "line": 411,
+      "line": 413,
       "method": "sync.run",
       "payload_keys": [
         "days_back"
@@ -2364,7 +2346,7 @@
       "declared_return": "Promise<{ success: boolean; summary: string; result: { sync_new: number; wa_messages: number; wa_contacts: number; wa_skipped_reason?: string | null | undefined; }; errors: { severity?: string | undefined; title?: string | undefined; detail?: string | undefined; action?: string | undefined; mailbox?: string | undefined; }[]; }>"
     },
     {
-      "line": 435,
+      "line": 437,
       "method": "setup.state",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2372,7 +2354,7 @@
       "declared_return": "Promise<{ has_synced: boolean; has_trained: boolean; emails_count: number; whatsapp_messages_count: number; agents_trained: string[]; emails_analyzed_count?: number | null | undefined; emails_pending_analysis?: number | null | undefined; last_email_analyzed_at?: string | null | undefined; mailboxes?: { mailbox_id: string; address: string; emails_count: number; emails_pending_analysis: number; }[] | undefined; }>"
     },
     {
-      "line": 466,
+      "line": 468,
       "method": "agents.train_all",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2380,7 +2362,7 @@
       "declared_return": "Promise<{ ok: boolean; error?: string | undefined; results: Record<string, { ok: boolean; error?: string | undefined; threads_analyzed?: number | undefined; whatsapp_chats_analyzed?: number | undefined; }>; }>"
     },
     {
-      "line": 482,
+      "line": 484,
       "method": "emails.list_by_thread",
       "payload_keys": [
         "thread_id"
@@ -2392,7 +2374,7 @@
       "declared_return": "Promise<any>"
     },
     {
-      "line": 486,
+      "line": 488,
       "method": "emails.list_inbox",
       "payload_keys": [
         "limit",
@@ -2407,7 +2389,7 @@
       "declared_return": "Promise<{ threads: any[]; }>"
     },
     {
-      "line": 496,
+      "line": 498,
       "method": "emails.list_sent",
       "payload_keys": [
         "limit",
@@ -2422,7 +2404,7 @@
       "declared_return": "Promise<{ threads: any[]; }>"
     },
     {
-      "line": 515,
+      "line": 517,
       "method": "emails.search",
       "payload_keys": [
         "folder",
@@ -2441,7 +2423,7 @@
       "declared_return": "Promise<{ threads: any[]; }>"
     },
     {
-      "line": 527,
+      "line": 529,
       "method": "emails.pin",
       "payload_keys": [
         "pinned",
@@ -2455,7 +2437,7 @@
       "declared_return": "Promise<{ ok: boolean; affected: number; }>"
     },
     {
-      "line": 533,
+      "line": 535,
       "method": "emails.mark_read",
       "payload_keys": [
         "thread_id"
@@ -2467,7 +2449,7 @@
       "declared_return": "Promise<{ ok: boolean; affected: number; }>"
     },
     {
-      "line": 544,
+      "line": 546,
       "method": "emails.archive",
       "payload_keys": [
         "thread_id"
@@ -2479,7 +2461,7 @@
       "declared_return": "Promise<{ ok: boolean; archived: number; mailboxes: { mailbox_id: string; attempted: number; moved: number; error: string | null; }[]; }>"
     },
     {
-      "line": 558,
+      "line": 560,
       "method": "emails.delete",
       "payload_keys": [
         "thread_id"
@@ -2491,7 +2473,7 @@
       "declared_return": "Promise<{ ok: boolean; deleted: number; }>"
     },
     {
-      "line": 569,
+      "line": 571,
       "method": "mailboxes.list",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2499,7 +2481,7 @@
       "declared_return": "Promise<{ mailboxes: any[]; }>"
     },
     {
-      "line": 570,
+      "line": 572,
       "method": "mailboxes.presets",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2507,7 +2489,7 @@
       "declared_return": "Promise<{ presets: any[]; }>"
     },
     {
-      "line": 578,
+      "line": 580,
       "method": "mailboxes.test",
       "payload_keys": [
         "address",
@@ -2525,7 +2507,7 @@
       "declared_return": "Promise<MailboxTestResult>"
     },
     {
-      "line": 588,
+      "line": 590,
       "method": "mailboxes.add",
       "payload_keys": [
         "address",
@@ -2544,7 +2526,7 @@
       "declared_return": "Promise<MailboxMutationResult>"
     },
     {
-      "line": 602,
+      "line": 604,
       "method": "mailboxes.update",
       "payload_keys": [
         "imap_host",
@@ -2562,7 +2544,7 @@
       "declared_return": "Promise<MailboxMutationResult>"
     },
     {
-      "line": 608,
+      "line": 610,
       "method": "mailboxes.remove",
       "payload_keys": [
         "mailbox_id"
@@ -2574,7 +2556,7 @@
       "declared_return": "Promise<MailboxMutationResult>"
     },
     {
-      "line": 639,
+      "line": 641,
       "method": "profiles.create",
       "payload_keys": [
         "email",
@@ -2588,7 +2570,7 @@
       "declared_return": "Promise<{ ok: boolean; profile: string; }>"
     },
     {
-      "line": 651,
+      "line": 653,
       "method": "narration.summarize",
       "payload_keys": [
         "context",
@@ -2602,7 +2584,7 @@
       "declared_return": "Promise<{ text: string; }>"
     },
     {
-      "line": 653,
+      "line": 655,
       "method": "narration.predict",
       "payload_keys": [
         "context",
@@ -2616,7 +2598,7 @@
       "declared_return": "Promise<{ text: string; }>"
     },
     {
-      "line": 657,
+      "line": 659,
       "method": "settings.schema",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2624,7 +2606,7 @@
       "declared_return": "Promise<{ fields: { key: string; label: string; type: \"number\" | \"text\" | \"password\" | \"select\" | \"textarea\"; group: string; optional?: boolean | undefined; options?: string[] | undefined; help?: string | undefined; secret?: boolean | undefined; }[]; }>"
     },
     {
-      "line": 669,
+      "line": 671,
       "method": "settings.get",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2632,7 +2614,7 @@
       "declared_return": "Promise<{ values: Record<string, string>; }>"
     },
     {
-      "line": 675,
+      "line": 677,
       "method": "settings.get_secret",
       "payload_keys": [
         "key"
@@ -2644,7 +2626,7 @@
       "declared_return": "Promise<{ key: string; value: string; }>"
     },
     {
-      "line": 677,
+      "line": 679,
       "method": "settings.update",
       "payload_keys": [
         "updates"
@@ -2656,7 +2638,7 @@
       "declared_return": "Promise<{ ok: boolean; applied: string[]; skipped_unchanged: string[]; }>"
     },
     {
-      "line": 786,
+      "line": 788,
       "method": "account.set_firebase_token",
       "payload_keys": [
         "email",
@@ -2674,7 +2656,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 794,
+      "line": 796,
       "method": "account.sign_out",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2682,7 +2664,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 802,
+      "line": 804,
       "method": "account.who_am_i",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2690,7 +2672,7 @@
       "declared_return": "Promise<{ signed_in: boolean; uid?: string | undefined; email?: string | null | undefined; expires_at_ms?: number | undefined; }>"
     },
     {
-      "line": 817,
+      "line": 819,
       "method": "account.balance",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2698,7 +2680,7 @@
       "declared_return": "Promise<{ balance_credits: number; balance_micro_usd: number; balance_usd: number; granularity_micro_usd?: number | undefined; estimate_messages_remaining?: number | undefined; } | { error: \"auth_expired\"; }>"
     },
     {
-      "line": 824,
+      "line": 826,
       "method": "sms.get_sender",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2706,7 +2688,7 @@
       "declared_return": "Promise<{ sender: string; business_id?: string | undefined; } | { error: \"auth_expired\"; }>"
     },
     {
-      "line": 828,
+      "line": 830,
       "method": "sms.set_sender",
       "payload_keys": [
         "sender"
@@ -2718,7 +2700,7 @@
       "declared_return": "Promise<{ sender: string; business_id?: string | undefined; } | { error: \"auth_expired\"; }>"
     },
     {
-      "line": 837,
+      "line": 839,
       "method": "mrcall.list_my_businesses",
       "payload_keys": [
         "limit",
@@ -2732,7 +2714,7 @@
       "declared_return": "Promise<{ businesses: unknown[]; role: string; }>"
     },
     {
-      "line": 863,
+      "line": 865,
       "method": "mrcall.search_businesses",
       "payload_keys": [
         "address",
@@ -2757,7 +2739,7 @@
       "declared_return": "Promise<{ businesses: unknown[]; role: string; }>"
     },
     {
-      "line": 878,
+      "line": 880,
       "method": "google.calendar.connect",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2765,7 +2747,7 @@
       "declared_return": "Promise<{ ok: boolean; email: string; scope: string; }>"
     },
     {
-      "line": 884,
+      "line": 886,
       "method": "google.calendar.disconnect",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2773,7 +2755,7 @@
       "declared_return": "Promise<{ ok: boolean; }>"
     },
     {
-      "line": 891,
+      "line": 893,
       "method": "google.calendar.status",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2781,7 +2763,7 @@
       "declared_return": "Promise<{ connected: boolean; signed_in?: boolean | undefined; email?: string | null | undefined; }>"
     },
     {
-      "line": 896,
+      "line": 898,
       "method": "google.calendar.cancel",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2789,7 +2771,7 @@
       "declared_return": "Promise<{ cancelled: boolean; }>"
     },
     {
-      "line": 907,
+      "line": 909,
       "method": "whatsapp.connect",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2797,7 +2779,7 @@
       "declared_return": "Promise<{ ok: boolean; phone?: string | null | undefined; display_name?: string | null | undefined; reason?: string | undefined; }>"
     },
     {
-      "line": 916,
+      "line": 918,
       "method": "whatsapp.disconnect",
       "payload_keys": [
         "forget_session"
@@ -2809,7 +2791,7 @@
       "declared_return": "Promise<{ ok: boolean; forgot: boolean; error?: string | undefined; }>"
     },
     {
-      "line": 923,
+      "line": 925,
       "method": "whatsapp.status",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2817,7 +2799,7 @@
       "declared_return": "Promise<{ connected: boolean; has_session: boolean; phone?: string | null | undefined; display_name?: string | null | undefined; }>"
     },
     {
-      "line": 929,
+      "line": 931,
       "method": "whatsapp.cancel",
       "payload_keys": [],
       "guaranteed_keys": [],
@@ -2825,7 +2807,7 @@
       "declared_return": "Promise<{ cancelled: boolean; }>"
     },
     {
-      "line": 931,
+      "line": 933,
       "method": "whatsapp.list_threads",
       "payload_keys": [
         "limit",
@@ -2839,7 +2821,7 @@
       "declared_return": "Promise<{ threads: WhatsAppThread[]; total_messages?: number | undefined; owner_id?: string | undefined; breakdown_by_server?: Record<string, number> | undefined; error?: string | undefined; }>"
     },
     {
-      "line": 942,
+      "line": 944,
       "method": "whatsapp.list_messages",
       "payload_keys": [
         "chat_jid",
@@ -2855,7 +2837,7 @@
       "declared_return": "Promise<{ messages: WhatsAppMessage[]; error?: string | undefined; }>"
     },
     {
-      "line": 954,
+      "line": 956,
       "method": "whatsapp.search_messages",
       "payload_keys": [
         "limit",
@@ -2869,7 +2851,7 @@
       "declared_return": "Promise<{ threads: WhatsAppThread[]; query?: string | undefined; error?: string | undefined; }>"
     },
     {
-      "line": 964,
+      "line": 966,
       "method": "whatsapp.send_message",
       "payload_keys": [
         "chat_jid",
@@ -2907,6 +2889,13 @@
     },
     {
       "api": "drafts.send",
+      "renderer": "(draftId: string, requestKey: string) => Promise<MailboxDraftOutcome>",
+      "preload": "(draftId: string, requestKey: string) => Promise<MailboxDraftOutcome>",
+      "renderer_arguments_accepted": true,
+      "declared_return_assignable": true
+    },
+    {
+      "api": "drafts.sendStatus",
       "renderer": "(draftId: string, requestKey: string) => Promise<MailboxDraftOutcome>",
       "preload": "(draftId: string, requestKey: string) => Promise<MailboxDraftOutcome>",
       "renderer_arguments_accepted": true,

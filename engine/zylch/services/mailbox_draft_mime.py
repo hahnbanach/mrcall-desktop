@@ -16,11 +16,11 @@ class MailboxDraftError(ValueError):
 def handle(owner, native_id):
     if not isinstance(native_id, str) or not native_id or ":" in native_id:
         raise MailboxDraftError("invalid_native_draft_id")
-    return "gmail:" + hashlib.sha256(owner.lower().encode()).hexdigest() + ":" + native_id
+    return "imap:" + hashlib.sha256(owner.lower().encode()).hexdigest() + ":" + native_id
 
 
 def native_id(owner, draft_id):
-    prefix = "gmail:" + hashlib.sha256(owner.lower().encode()).hexdigest() + ":"
+    prefix = "imap:" + hashlib.sha256(owner.lower().encode()).hexdigest() + ":"
     if not isinstance(draft_id, str) or not draft_id.startswith(prefix):
         raise MailboxDraftError("draft_mailbox_mismatch", draft_id=draft_id)
     result = draft_id.removeprefix(prefix)
@@ -88,7 +88,7 @@ def row(owner, draft, *, provenance=None):
         "created_at": str(msg.get("Date") or ""), "updated_at": None,
         "attachments": attachments(msg),
         "body_editable": not msg.is_multipart() and msg.get_content_type() == "text/plain",
-        "provider": "gmail", "provider_draft_id": draft["id"],
+        "provider": "imap", "provider_draft_id": draft["id"],
         "provider_message_id": draft["message_id"],
         "provider_thread_id": draft["thread_id"],
         "message_id_header": str(msg.get("Message-ID") or ""),
@@ -154,7 +154,7 @@ def update_raw(raw, fields):
             msg[name] = value
     if "body" in fields or "body_format" in fields:
         if msg.is_multipart():
-            raise MailboxDraftError("rich_draft_body_edit_in_gmail")
+            raise MailboxDraftError("rich_draft_body_edit_in_mailbox")
         body = fields.get("body", msg.get_content())
         subtype = fields.get("body_format", "html" if msg.get_content_type() == "text/html" else "plain")
         if subtype not in {"plain", "html"} or not isinstance(body, str):

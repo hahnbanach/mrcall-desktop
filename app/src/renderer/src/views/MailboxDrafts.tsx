@@ -4,7 +4,7 @@ import { errorMessage } from '../lib/errors'
 import HtmlEmailBody from '../components/HtmlEmailBody'
 
 type Action = 'send' | 'trash'
-type Pending = { kind: Action; requestKey: string; draftId: string; mailboxId?: string }
+type Pending = { kind: Action; requestKey: string; draftId: string; mailboxId?: string; sentConfirmed?: boolean }
 type Editor = { to: string; cc: string; bcc: string; subject: string; body: string }
 
 function addresses(value: string | string[] | undefined): string {
@@ -22,8 +22,8 @@ function fields(draft: MailboxDraft): Editor {
 
 function message(error: unknown): string {
   const value = errorMessage(error)
-  return value.includes('gmail_authorization_required')
-    ? 'Connect this mailbox to Gmail to use drafts, then refresh.'
+  return value.includes('imap_authentication') || value.includes('mailbox_credentials')
+    ? 'Check this mailbox’s email connection settings, then refresh drafts.'
     : value
 }
 
@@ -85,6 +85,7 @@ export default function MailboxDrafts({ mailboxId, profileId, active, onCountCha
       if (!Array.isArray(next)) throw new Error('The mailbox draft list is unavailable. Refresh to try again.')
       setRows(next)
       onCountChange(next.length)
+      return next
     } catch (cause) {
       if (current === request.current) {
         setError(message(cause))
@@ -163,8 +164,10 @@ export default function MailboxDrafts({ mailboxId, profileId, active, onCountCha
       if (Object.keys(patch).length > 1) {
         const result = await window.zylch.drafts.update(patch)
         if (!result.ok || !result.draft) throw new Error(result.cause || 'The draft could not be saved.')
-        if (result.draft.id !== draft.id) throw new Error('The mailbox returned a different draft. Refresh to try again.')
+        if (!result.draft.id || result.draft.mailbox_id && draft.mailbox_id
+          && result.draft.mailbox_id !== draft.mailbox_id) throw new Error('The mailbox returned a different mailbox. Refresh to try again.')
         setDraft(result.draft)
+        setSelectedId(result.draft.id)
       }
       setEditing(false)
       setEditor(null)
@@ -185,27 +188,56 @@ export default function MailboxDrafts({ mailboxId, profileId, active, onCountCha
     setError(null)
     setNotice(null)
     try {
+      let current = draft
+      if (!pending) {
+        const listed = await refresh()
+        if (!listed) return
+        if (!listed.some(row => row.id === selectedId)) {
+          setSelectedId(null)
+          setDraft(null)
+          throw new Error('This draft changed or left the mailbox. Select its current entry before trying again.')
+        }
+        const observed = await window.zylch.drafts.get(selectedId)
+        if (!observed.ok || !observed.draft || observed.draft.id !== selectedId) {
+          throw new Error(observed.cause || 'This draft is no longer in the mailbox. Refresh drafts.')
+        }
+        current = observed.draft
+        setDraft(current)
+        if (kind === 'send' && (current.has_attachments || current.attachments?.length)) {
+          throw new Error('This draft has attachments. Send it from your mail app.')
+        }
+      }
       const operation = pending || { kind, requestKey: crypto.randomUUID(), draftId: selectedId,
-        mailboxId: draft?.mailbox_id || mailboxId }
-      localStorage.setItem(pendingKey(profileId, selectedId), JSON.stringify(operation))
+        mailboxId: current?.mailbox_id || mailboxId }
+      localStorage.setItem(pendingKey(profileId, operation.draftId), JSON.stringify(operation))
       setRecoveries(savedOperations(profileId, mailboxId))
       setPending(operation)
-      const result = await window.zylch.drafts[kind](selectedId, operation.requestKey)
+      const result = kind === 'send' && pending && !pending.sentConfirmed
+        ? await window.zylch.drafts.sendStatus(operation.draftId, operation.requestKey)
+        : await window.zylch.drafts[kind](operation.draftId, operation.requestKey)
       if (!result.ok) {
         if (result.effect_certainty === 'not-dispatched') {
-          localStorage.removeItem(pendingKey(profileId, selectedId))
+          localStorage.removeItem(pendingKey(profileId, operation.draftId))
           setRecoveries(savedOperations(profileId, mailboxId))
           setPending(null)
           setError(message(result.cause || 'The mailbox operation did not start. Refresh the draft and try again.'))
           return
         }
-        setNotice(kind === 'send'
-          ? 'Sending is not confirmed. Check again to retrieve the result of the same send.'
-          : 'Moving to Trash is not confirmed. Check again to retrieve the same operation.')
+        if (kind === 'send' && result.state === 'sent' && result.effect_certainty === 'verified') {
+          const confirmed = { ...operation, sentConfirmed: true }
+          localStorage.setItem(pendingKey(profileId, operation.draftId), JSON.stringify(confirmed))
+          setPending(confirmed)
+          setRecoveries(savedOperations(profileId, mailboxId))
+          setNotice('Sent mail is confirmed. Remove the original draft to finish.')
+        } else {
+          setNotice(kind === 'send'
+            ? 'Sending is not confirmed. Check again to retrieve the result of the same send.'
+            : 'Moving to Trash is not confirmed. Check again to retrieve the same operation.')
+        }
         if (result.cause) setError(message(result.cause))
         return
       }
-      localStorage.removeItem(pendingKey(profileId, selectedId))
+      localStorage.removeItem(pendingKey(profileId, operation.draftId))
       setRecoveries(savedOperations(profileId, mailboxId))
       setPending(null)
       setSelectedId(null)
@@ -279,7 +311,7 @@ export default function MailboxDrafts({ mailboxId, profileId, active, onCountCha
           {!opening && !editing && (draft || pending) && (
             <div className="mt-4 flex gap-2">
               <button onClick={() => void perform('send')} disabled={busy || pending?.kind === 'trash' || hasAttachments}
-                className="bg-brand-blue text-white rounded px-3 py-2 text-sm disabled:opacity-50">{busy && pending?.kind === 'send' ? 'Checking send…' : pending?.kind === 'send' ? 'Check send' : 'Send draft'}</button>
+                className="bg-brand-blue text-white rounded px-3 py-2 text-sm disabled:opacity-50">{busy && pending?.kind === 'send' ? 'Checking send…' : pending?.kind === 'send' ? pending.sentConfirmed ? 'Remove sent draft' : 'Check send' : 'Send draft'}</button>
               <button onClick={() => void perform('trash')} disabled={busy || pending?.kind === 'send'}
                 className="border border-brand-danger/30 text-brand-danger rounded px-3 py-2 text-sm disabled:opacity-50">{busy && pending?.kind === 'trash' ? 'Checking Trash…' : pending?.kind === 'trash' ? 'Check Trash' : 'Move to Trash'}</button>
             </div>

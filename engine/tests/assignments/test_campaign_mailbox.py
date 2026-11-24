@@ -42,7 +42,7 @@ def test_native_create_and_sparse_update_store_only_handle_and_request_hashes(jo
     contact = add(campaign(), dossier={"research": "Synthetic research"})
     assert contact["draft_body"] is None and contact["draft_subject"] is None
     native_id = contact["dossier"]["mailbox_draft_id"]
-    assert native_id.startswith("gmail:") and NativeMailbox.creates == 1
+    assert native_id.startswith("imap:") and NativeMailbox.creates == 1
     native = next(iter(NativeMailbox.drafts.values()))
     assert parsed(native["raw"]).get_content().strip() == "Synthetic model composed text"
     native["raw"] = build(OWNER, to=["edited@example.test"], subject="Subject from Gmail", body="Human saved body")
@@ -50,7 +50,7 @@ def test_native_create_and_sparse_update_store_only_handle_and_request_hashes(jo
     current = parsed(next(iter(NativeMailbox.drafts.values()))["raw"])
     assert str(current["To"]) == "edited@example.test" and current.get_content().strip() == "Human saved body"
     assert str(current["Subject"]) == "New explicit subject"
-    assert result["dossier"]["mailbox_draft_id"] == native_id
+    assert result["dossier"]["mailbox_draft_id"] != native_id
     assert result["dossier"]["research"] == "Synthetic research"
     assert result["draft_body"] is None and result["draft_subject"] is None
 
@@ -58,11 +58,11 @@ def test_native_create_and_sparse_update_store_only_handle_and_request_hashes(jo
 def test_same_key_replay_preserves_gmail_edits_and_rejects_changed_request(journey):
     camp = campaign()
     contact = add(camp)
-    update(contact, draft_body="Explicit update")
+    updated = update(contact, draft_body="Explicit update")["contact"]
     native = next(iter(NativeMailbox.drafts.values()))
     native["raw"] = build(OWNER, to=["human@example.test"], subject="Human subject", body="Later Gmail edit")
     replay = update(contact, draft_body="Explicit update")["contact"]
-    assert replay["dossier"]["mailbox_draft_id"] == contact["dossier"]["mailbox_draft_id"]
+    assert replay["dossier"]["mailbox_draft_id"] == updated["dossier"]["mailbox_draft_id"]
     assert parsed(native["raw"]).get_content().strip() == "Later Gmail edit"
     with pytest.raises(campaign_mailbox.CampaignMailboxError, match="request_conflict"):
         update(contact, draft_body="Different supplied text")
@@ -112,11 +112,11 @@ def test_null_legacy_housekeeping_does_not_clear_native_text_or_binding(journey)
 
 
 def test_provider_authorization_failure_never_persists_generated_text(journey, monkeypatch):
-    from zylch.email.gmail_auth import GmailError
+    from zylch.email.mailbox_errors import MailboxProviderError
     def unavailable(owner):
-        raise GmailError("gmail_authorization_required")
-    monkeypatch.setattr("zylch.email.gmail_mailbox.GmailMailbox", unavailable)
-    with pytest.raises(Exception, match="gmail_authorization_required"):
+        raise MailboxProviderError("imap_authentication_failed")
+    monkeypatch.setattr("zylch.email.imap_mailbox.IMAPMailbox", unavailable)
+    with pytest.raises(Exception, match="imap_authentication_failed"):
         add(campaign())
     with db.get_session() as session:
         contact = session.query(CampaignContact).one().to_dict()
@@ -161,7 +161,7 @@ def test_concurrent_adds_and_completed_receipt_before_handle_attachment_keep_one
     assert NativeMailbox.creates == 2 and "mailbox_draft_id" not in stored(other["id"])["dossier"]
     monkeypatch.setattr(campaign_mailbox, "_record", real_record)
     recovered = update(other, key="campaign-crash-key-00001", draft_body="Crash boundary text")["contact"]
-    assert recovered["dossier"]["mailbox_draft_id"].startswith("gmail:")
+    assert recovered["dossier"]["mailbox_draft_id"].startswith("imap:")
     assert NativeMailbox.creates == 2 and len(NativeMailbox.drafts) == 2
 
 
@@ -185,12 +185,12 @@ def test_public_dispatch_accepts_key_and_reserved_metadata_cannot_rebind(journey
 
 
 def test_authorization_repair_uses_new_request_without_retaining_failed_text(journey, monkeypatch):
-    from zylch.email.gmail_auth import GmailError
+    from zylch.email.mailbox_errors import MailboxProviderError
     camp = campaign()
     def unavailable(owner):
-        raise GmailError("gmail_authorization_required")
-    monkeypatch.setattr("zylch.email.gmail_mailbox.GmailMailbox", unavailable)
-    with pytest.raises(Exception, match="gmail_authorization_required"):
+        raise MailboxProviderError("imap_authentication_failed")
+    monkeypatch.setattr("zylch.email.imap_mailbox.IMAPMailbox", unavailable)
+    with pytest.raises(Exception, match="imap_authentication_failed"):
         add(camp)
     with db.get_session() as session:
         initial = session.query(CampaignContact).one().to_dict()
@@ -198,14 +198,14 @@ def test_authorization_repair_uses_new_request_without_retaining_failed_text(jou
     with db.get_engine().connect() as conn:
         receipts = [tuple(row) for row in conn.exec_driver_sql("SELECT payload_digest, result FROM mailbox_operation_receipts")]
     assert "Synthetic model composed text" not in str(receipts)
-    monkeypatch.setattr("zylch.email.gmail_mailbox.GmailMailbox", NativeMailbox)
+    monkeypatch.setattr("zylch.email.imap_mailbox.IMAPMailbox", NativeMailbox)
     repaired = add(camp, key="campaign-auth-repaired-0001")
     assert repaired["id"] == initial["id"] and NativeMailbox.creates == 1
     assert repaired["draft_subject"] is None and repaired["draft_body"] is None
 
 
 def test_native_attachment_update_refuses_and_metadata_only_contact_needs_no_provider(journey, monkeypatch):
-    from zylch.email.gmail_auth import GmailError
+    from zylch.email.mailbox_errors import MailboxProviderError
     camp = campaign()
     contact = add(camp)
     native = next(iter(NativeMailbox.drafts.values()))
@@ -218,8 +218,8 @@ def test_native_attachment_update_refuses_and_metadata_only_contact_needs_no_pro
     assert native["raw"] == before and NativeMailbox.creates == 1
     assert stored(contact["id"])["draft_body"] is None
     def unavailable(owner):
-        raise GmailError("gmail_authorization_required")
-    monkeypatch.setattr("zylch.email.gmail_mailbox.GmailMailbox", unavailable)
+        raise MailboxProviderError("imap_authentication_failed")
+    monkeypatch.setattr("zylch.email.imap_mailbox.IMAPMailbox", unavailable)
     ordinary = asyncio.run(ca.campaign_add_contact({"campaign_id": camp["id"],
         "email": "ordinary@example.test", "language": "en"}, notify))
     changed = asyncio.run(ca.campaign_update_contact({"contact_id": ordinary["id"], "language": "fr"}, notify))
@@ -259,7 +259,8 @@ def test_public_pack_queue_preserves_html_cc_and_native_replay(journey):
 def test_replaying_older_create_or_edit_key_does_not_replace_latest_claim(journey):
     camp = campaign()
     contact = add(camp)
-    update(contact, draft_body="Edit B")
+    replaced = update(contact, draft_body="Edit B")["contact"]
+    assert replaced["dossier"]["mailbox_draft_id"] != contact["dossier"]["mailbox_draft_id"]
     before = stored(contact["id"])["dossier"]
     native = next(iter(NativeMailbox.drafts.values()))
     native["raw"] = build(OWNER, to=["human@example.test"], subject="Human subject", body="Human edit after B")
@@ -270,10 +271,42 @@ def test_replaying_older_create_or_edit_key_does_not_replace_latest_claim(journe
     latest = stored(contact["id"])["dossier"]
     update(contact, draft_body="Edit B")
     assert stored(contact["id"])["dossier"] == latest
-    assert parsed(native["raw"]).get_content().strip() == "Edit C"
+    assert parsed(next(iter(NativeMailbox.drafts.values()))["raw"]).get_content().strip() == "Edit C"
     with pytest.raises(Exception, match="request_key_payload_conflict"):
         add(camp, draft_body="Wrong replay body")
     assert stored(contact["id"])["dossier"] == latest
     update(contact, key="campaign-update-key-0004", draft_body="Edit D")
-    assert parsed(native["raw"]).get_content().strip() == "Edit D"
+    assert parsed(next(iter(NativeMailbox.drafts.values()))["raw"]).get_content().strip() == "Edit D"
     assert NativeMailbox.creates == 1 and NativeMailbox.transmissions == 0
+
+
+def test_unclaimed_central_receipt_cannot_adopt_another_draft(journey):
+    from zylch.services.mailbox_drafts import MailboxDrafts
+    contact = add(campaign())
+    original = stored(contact["id"])["dossier"]
+    mailbox = MailboxDrafts(OWNER)
+    other = mailbox.create(["other@example.test"], "Other draft", "Unrelated saved body",
+                           request_key="other-owned-draft-0001")
+    key = "forged-campaign-request-0001"
+    receipt_key = campaign_mailbox._receipt_key(OWNER, contact["id"], key)
+    mailbox._reserve(receipt_key, "update", other["id"], "", {"body": "Forged change"})
+    with pytest.raises(campaign_mailbox.CampaignMailboxError, match="receipt_binding_mismatch"):
+        update(contact, key=key, draft_body="Forged change")
+    assert stored(contact["id"])["dossier"] == original
+    assert mailbox.get(other["id"])["body"].strip() == "Unrelated saved body"
+
+
+def test_replacement_replay_after_store_reopen_retains_new_handle(journey):
+    contact = add(campaign())
+    changed = update(contact, draft_body="Approved replacement body")["contact"]
+    latest = changed["dossier"]["mailbox_draft_id"]
+    assert latest != contact["dossier"]["mailbox_draft_id"]
+    assert "Approved replacement body" not in str(changed["dossier"])
+    db.dispose_engine()
+    replay = update(contact, draft_body="Approved replacement body")["contact"]
+    assert replay["dossier"]["mailbox_draft_id"] == latest
+    assert NativeMailbox.updates == 1
+    altered = {**replay["dossier"]["mailbox_draft_request"], "history": {}}
+    with pytest.raises(ValueError, match="engine-owned"):
+        asyncio.run(ca.campaign_update_contact({"contact_id": contact["id"],
+            "dossier": {"mailbox_draft_request": altered}}, notify))

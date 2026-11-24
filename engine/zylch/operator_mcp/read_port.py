@@ -72,10 +72,10 @@ class NativeReadPort:
                 handler = self._handlers[name]
             result = await handler(params, lambda method, values: None)
         except Exception as error:
-            from zylch.email.gmail_auth import GmailError
+            from zylch.email.mailbox_errors import MailboxProviderError
             from zylch.services.mailbox_draft_mime import MailboxDraftError
             from zylch.services.task_assignment_types import AssignmentError
-            if isinstance(error, GmailError):
+            if isinstance(error, MailboxProviderError):
                 raise ReadError(error.reason) from None
             if isinstance(error, MailboxDraftError):
                 raise ReadError(error.cause) from None

@@ -4,6 +4,7 @@ from contextlib import nullcontext
 from email.utils import make_msgid
 from concurrent.futures import ThreadPoolExecutor
 import threading
+import hashlib
 import base64
 import json
 import os
@@ -29,6 +30,7 @@ def cleanup_test_data():
 
 
 class Provider:
+    """A lossless mailbox with immutable messages and a separate SMTP wire."""
     def __init__(self):
         self.drafts = {}
         self.outgoing = []
@@ -38,6 +40,8 @@ class Provider:
         self.visible = True
         self.lose_ack = False
         self.fail_search = False
+        self.fail_retirement = False
+        self.retirement_attempts = 0
         self.before_send = None
         self.lock = threading.Lock()
 
@@ -51,31 +55,39 @@ class Provider:
         return self.drafts.get(identifier)
 
     def thread_for_message(self, target):
-        return "native-thread"
+        return "provider-thread"
 
     def create_draft(self, raw, thread_id=None):
         self.creations += 1
-        item = dict(id="native-draft", message_id="message-1", thread_id=thread_id,
+        identifier = "native-draft" if self.creations == 1 else f"native-draft-{self.creations}"
+        item = dict(id=identifier, message_id=f"message-{self.creations}", thread_id=thread_id,
                     labels=["DRAFT"], raw=raw)
         self.drafts[item["id"]] = item
         return item
 
-    def update_draft(self, identifier, raw, thread_id=None):
+    def _check(self, value, expected_identity):
+        if expected_identity and (expected_identity["id"] != value["id"] or
+                expected_identity["raw_sha256"] != hashlib.sha256(value["raw"]).hexdigest()):
+            raise MailboxDraftError("draft_identity_changed")
+
+    def update_draft(self, identifier, raw, thread_id=None, *, expected_identity=None):
         old = self.drafts[identifier]
-        self.drafts[identifier] = {**old, "raw": raw, "message_id": make_msgid()}
-        return self.drafts[identifier]
+        self._check(old, expected_identity)
+        assert str(parse(raw)["Message-ID"]) != str(parse(old["raw"])["Message-ID"])
+        self.trash_draft(identifier, expected_identity=expected_identity)
+        return self.create_draft(raw, thread_id)
 
     def find_drafts(self, message_id):
         return [value for value in self.list_drafts()
                 if str(parse(value["raw"]).get("Message-ID")) == message_id]
 
-    def send_draft(self, identifier, raw):
+    def send_draft(self, identifier, raw, *, expected_identity=None):
         with self.lock:
             if self.before_send:
                 self.before_send(self, identifier)
             if identifier not in self.drafts:
                 raise MailboxDraftError("named_draft_not_found")
-            self.drafts.pop(identifier)
+            self._check(self.drafts[identifier], expected_identity)
             return self.send_message(raw)
 
     def send_message(self, raw):
@@ -91,10 +103,25 @@ class Provider:
         return [value for value in self.outgoing if self.visible and
                 str(parse(value["raw"]).get("Message-ID")) == message_id]
 
-    def trash_draft(self, identifier):
-        value = self.drafts.pop(identifier)
+    def trash_draft(self, identifier, *, expected_identity=None):
+        value = self.drafts[identifier]
+        self._check(value, expected_identity)
+        self.drafts.pop(identifier)
         self.trashed.append(value)
-        return {"message_id": value["message_id"], "labels": ["TRASH"]}
+        return {"ok": True, "message_id": value["message_id"], "labels": ["TRASH"]}
+
+    def recover_trash(self, identity):
+        found = [value for value in self.trashed if value["id"] == identity["id"] and
+                 hashlib.sha256(value["raw"]).hexdigest() == identity["raw_sha256"]]
+        return {"ok": len(found) == 1 and identity["id"] not in self.drafts, "state": "trashed"}
+
+    def retire_sent_draft(self, identifier, *, expected_identity=None):
+        self.retirement_attempts += 1
+        if self.fail_retirement:
+            raise TimeoutError("Injected retirement failure")
+        if identifier not in self.drafts:
+            return {"ok": True, "state": "absent"}
+        return {**self.trash_draft(identifier, expected_identity=expected_identity), "state": "trashed"}
 
 
 @pytest.fixture
@@ -117,20 +144,24 @@ def prepare(value, request_key="prepare-operation-0001"):
                         source_id="source-uuid", request_key=request_key)
 
 
-def test_saved_edit_uses_stable_container_current_body_and_recipients(state):
+def test_saved_external_edit_uses_fresh_handle_current_body_and_recipients(state):
     value = service(state)
     draft = prepare(value)
     provider = state[1]
     provider.update_draft("native-draft", build(OWNER, to=["edited@example.test"],
                           subject="Edited", body="Saved in another client", in_reply_to=TARGET))
-    result = value.send(draft["id"], "send-operation-0001")
+    current = value.list()[0]
+    assert current["id"] != draft["id"]
+    stale = value.send(draft["id"], "stale-before-refresh-0001")
+    assert not stale["ok"] and provider.transmissions == 0
+    result = value.send(current["id"], "send-operation-0001")
     assert result["ok"] and result["state"] == "sent"
     sent = parse(provider.outgoing[0]["raw"])
     assert str(sent["To"]) == "edited@example.test"
     assert sent.get_content().strip() == "Saved in another client"
     assert str(sent["Message-ID"]) == result["message_id"]
     assert value.list() == []
-    assert service(state).send(draft["id"], "send-operation-0001") == result
+    assert service(state).send(current["id"], "send-operation-0001") == result
     assert provider.transmissions == 1
 
 
@@ -161,6 +192,7 @@ def test_external_removal_never_recreates_or_sends(state, external_action):
     if external_action == "send":
         old = provider.drafts["native-draft"]
         provider.send_draft("native-draft", old["raw"])
+        provider.trash_draft("native-draft")
     else:
         provider.trash_draft("native-draft")
     before = provider.transmissions
@@ -171,7 +203,7 @@ def test_external_removal_never_recreates_or_sends(state, external_action):
     assert provider.creations == 1 and provider.transmissions == before
 
 
-def test_delete_between_read_and_send_refuses_atomically(state):
+def test_delete_before_the_smtp_recheck_refuses_without_transmission(state):
     value = service(state)
     draft = prepare(value)
     provider = state[1]
@@ -278,39 +310,23 @@ def test_receipts_contain_no_editable_body(state):
     assert "body" not in RECEIPTS.c
 
 
-def test_authoritative_native_403_preserves_cause_and_allows_corrected_new_request(state):
-    import httpx
-    from zylch.email.gmail_mailbox import GmailMailbox
-    from tests.email.test_gmail_mailbox import Auth, draft as native_draft, message
-    mailbox_raw = build(OWNER, to=["test@example.test"], subject="Reply", body="Saved", in_reply_to=TARGET)
-    rejected, submitted = True, []
-    def handler(request):
-        nonlocal rejected
-        if request.url.path.endswith("/drafts/d1"):
-            return httpx.Response(200, json=native_draft(payload=mailbox_raw)) if not submitted else httpx.Response(404)
-        if request.url.path.endswith("/drafts/send"):
-            if rejected:
-                return httpx.Response(403)
-            encoded = json.loads(request.content)["message"]["raw"]
-            submitted.append(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
-            return httpx.Response(200, json={"id": "sent1", "threadId": "thread1"})
-        if request.url.path.endswith("/messages"):
-            return httpx.Response(200, json={"messages": [{"id": "sent1"}]} if submitted else {})
-        if request.url.path.endswith("/messages/sent1"):
-            return httpx.Response(200, json=message("sent1", labels=["SENT"], payload=submitted[0]))
-        raise AssertionError(request.url)
-    value = MailboxDrafts(OWNER, mailbox_id="mailbox-uuid", operations=MailboxOperations(state[0]),
-        provider_factory=lambda _: GmailMailbox(OWNER, auth=Auth(), http_client=httpx.Client(transport=httpx.MockTransport(handler))))
-    value._policy = lambda fields: nullcontext()
-    identifier = handle(OWNER, "d1")
-    initial = value.send(identifier, "native-rejected-send-0001")
+def test_authoritative_smtp_refusal_allows_a_corrected_new_request(state, monkeypatch):
+    from zylch.email.mailbox_errors import MailboxProviderError
+    value = service(state)
+    saved = prepare(value)
+    provider = state[1]
+    actual = provider.send_draft
+    def rejected(*args, **kwargs):
+        raise MailboxProviderError("smtp_authentication_failed", non_dispatch=True)
+    monkeypatch.setattr(provider, "send_draft", rejected)
+    initial = value.send(saved["id"], "smtp-rejected-send-0001")
     assert not initial["ok"] and initial["effect_certainty"] == "not-dispatched"
-    assert initial["cause"] == "gmail_authorization_required"
-    assert value.send(identifier, "native-rejected-send-0001") == initial
-    assert submitted == []
-    rejected = False
-    assert value.send(identifier, "native-corrected-send-0002")["ok"]
-    assert len(submitted) == 1
+    assert initial["cause"] == "smtp_authentication_failed"
+    assert value.send(saved["id"], "smtp-rejected-send-0001") == initial
+    assert provider.transmissions == 0 and len(provider.drafts) == 1
+    monkeypatch.setattr(provider, "send_draft", actual)
+    assert value.send(saved["id"], "smtp-corrected-send-0002")["ok"]
+    assert provider.transmissions == 1 and provider.drafts == {}
 
 
 def test_sparse_headers_preserve_rich_mime_alternatives(state):
@@ -321,16 +337,17 @@ def test_sparse_headers_preserve_rich_mime_alternatives(state):
     rich.add_alternative("<p>Rich <strong>signature</strong></p>", subtype="html")
     original_parts = [(part.get_content_type(), part.get_payload(decode=True).replace(b"\r\n", b"\n"))
                       for part in rich.walk() if not part.is_multipart()]
-    provider.update_draft("native-draft", rich.as_bytes())
-    value.update(draft["id"], to=["edited@example.test"], subject="New subject")
-    current = parse(provider.drafts["native-draft"]["raw"])
+    provider.drafts["native-draft"]["raw"] = rich.as_bytes()
+    updated = value.update(draft["id"], to=["edited@example.test"], subject="New subject")
+    current = parse(provider.list_drafts()[0]["raw"])
+    assert updated["id"] != draft["id"]
     assert str(current["To"]) == "edited@example.test"
     assert str(current["Subject"]) == "New subject"
     assert [(part.get_content_type(), part.get_payload(decode=True).replace(b"\r\n", b"\n"))
             for part in current.walk() if not part.is_multipart()] == original_parts
-    with pytest.raises(MailboxDraftError, match="rich_draft_body_edit_in_gmail"):
-        value.update(draft["id"], body="Unsupported conversion")
-    assert parse(provider.drafts["native-draft"]["raw"]).is_multipart()
+    with pytest.raises(MailboxDraftError, match="rich_draft_body_edit_in_mailbox"):
+        value.update(updated["id"], body="Unsupported conversion")
+    assert parse(provider.list_drafts()[0]["raw"]).is_multipart()
 
 
 class DiskProvider(Provider):
@@ -346,16 +363,22 @@ class DiskProvider(Provider):
                            for item in saved["drafts"]}
             self.outgoing = [{**item, "raw": base64.b64decode(item["raw"])}
                              for item in saved["outgoing"]]
+            self.trashed = [{**item, "raw": base64.b64decode(item["raw"])} for item in saved.get("trashed", [])]
 
     def save(self):
         def encode(item):
             return {**item, "raw": base64.b64encode(item["raw"]).decode()}
         self.path.write_text(json.dumps({"transmissions": self.transmissions,
             "creations": self.creations, "drafts": [encode(v) for v in self.drafts.values()],
-            "outgoing": [encode(v) for v in self.outgoing]}))
+            "outgoing": [encode(v) for v in self.outgoing], "trashed": [encode(v) for v in self.trashed]}))
 
     def create_draft(self, raw, thread_id=None):
         result = super().create_draft(raw, thread_id)
+        self.save()
+        return result
+
+    def trash_draft(self, identifier, **options):
+        result = super().trash_draft(identifier, **options)
         self.save()
         return result
 
@@ -445,12 +468,14 @@ def test_send_status_after_consumed_draft_recovers_delayed_sent_without_transmis
     provider = state[1]
     provider.visible = False
     sent = value.send(draft["id"], "status-delayed-send-key-0001")
-    assert sent["state"] == "unconfirmed" and provider.transmissions == 1 and not provider.drafts
+    assert sent["state"] == "unconfirmed" and provider.transmissions == 1 and provider.drafts
     assert service(state).send_status(draft["id"], "status-delayed-send-key-0001")["state"] == "unconfirmed"
     provider.visible = True
     confirmed = service(state).send_status(draft["id"], "status-delayed-send-key-0001")
     assert confirmed["state"] == "sent" and confirmed["message_id"] == sent["message_id"]
-    assert provider.transmissions == 1 and provider.creations == 1
+    assert not confirmed["ok"] and provider.retirement_attempts == 0 and provider.drafts
+    assert service(state).send(draft["id"], "status-delayed-send-key-0001")["ok"]
+    assert provider.transmissions == 1 and provider.creations == 1 and not provider.drafts
 
 
 def test_lost_save_ack_recovers_unique_native_marker_without_repeating_update(state, monkeypatch):
@@ -469,10 +494,11 @@ def test_lost_save_ack_recovers_unique_native_marker_without_repeating_update(st
     receipt = value.operation("lost-save-request-key-0001")
     assert receipt["stage"] == "unconfirmed"
     assert "Saved native body" not in str(receipt)
-    assert parse(provider.drafts["native-draft"]["raw"])["X-MrCall-Draft-Update"] == receipt["id"]
+    assert parse(provider.list_drafts()[0]["raw"])["X-MrCall-Draft-Update"] == receipt["id"]
     recovered = service(state).update(draft["id"], request_key="lost-save-request-key-0001", body="Saved native body")
     assert recovered["body"].strip() == "Saved native body" and len(saves) == 1
-    result = service(state).send(draft["id"], "send-after-lost-save-key")
+    assert recovered["id"] != draft["id"]
+    result = service(state).send(recovered["id"], "send-after-lost-save-key")
     assert result["state"] == "sent" and provider.transmissions == 1 and len(saves) == 1
 
 
@@ -496,8 +522,9 @@ def test_matching_noop_body_without_unique_update_marker_cannot_release_live_fen
             assert provider.transmissions == 0
         finally:
             release.set()
-        assert pending.result(timeout=5)["body"].strip() == "Original body"
-    assert service(state).send(draft["id"], "send-after-noop-save-key")["state"] == "sent"
+        updated = pending.result(timeout=5)
+        assert updated["body"].strip() == "Original body"
+    assert service(state).send(updated["id"], "send-after-noop-save-key")["state"] == "sent"
     assert provider.transmissions == 1
 
 
@@ -524,3 +551,201 @@ def test_preflight_rechecks_imported_legacy_sent_without_releasing_empty_search(
     confirmed = value.operation("legacy-send:old-operation-0001")
     assert confirmed["stage"] == "completed" and confirmed["message_id"] == original_id
     assert provider.transmissions == 0 and provider.creations == 0 and len(provider.outgoing) == 1
+
+
+def test_unknown_replacement_during_empty_folder_gap_fences_source_after_reopen(state, monkeypatch):
+    value = service(state)
+    draft = prepare(value)
+    provider = state[1]
+    attempts = []
+    def interrupted(identifier, raw, **options):
+        attempts.append(raw)
+        provider.trash_draft(identifier, expected_identity=options['expected_identity'])
+        raise TimeoutError('Stopped after exact retirement, before append confirmation')
+    monkeypatch.setattr(provider, 'update_draft', interrupted)
+    with pytest.raises(MailboxDraftError):
+        value.update(draft['id'], request_key='replacement-gap-request-0001', body='Replacement body')
+    assert not provider.drafts and len(provider.trashed) == 1
+    receipt = value.operation('replacement-gap-request-0001')
+    assert receipt['source'] == TARGET and receipt['stage'] == 'unconfirmed'
+    assert 'Replacement body' not in str(receipt)
+    reopened = service(state)
+    source = {'mailbox_id': 'mailbox-uuid', 'message_id_header': TARGET}
+    with pytest.raises(MailboxDraftError, match='source_update_unconfirmed'):
+        reopened.preflight(source)
+    with pytest.raises(MailboxDraftError, match='source_operation_unconfirmed'):
+        prepare(reopened, 'prepare-during-replacement-0001')
+    with pytest.raises(MailboxDraftError, match='source_operation_unconfirmed'):
+        reopened.send_message(['peer@example.test'], 'Reply', 'Would duplicate',
+            request_key='direct-during-replacement-0001', in_reply_to=TARGET)
+    with pytest.raises(MailboxDraftError):
+        reopened.update(draft['id'], request_key='replacement-gap-request-0001', body='Replacement body')
+    assert len(attempts) == 1 and provider.creations == 1 and provider.transmissions == 0
+
+
+def test_live_replacement_empty_gap_blocks_preparation_until_the_unique_append_completes(state, monkeypatch):
+    value = service(state)
+    draft = prepare(value)
+    provider = state[1]
+    entered, release = threading.Event(), threading.Event()
+    def blocked(identifier, raw, thread_id=None, **options):
+        provider.trash_draft(identifier, expected_identity=options['expected_identity'])
+        entered.set()
+        assert release.wait(5)
+        return provider.create_draft(raw, thread_id)
+    monkeypatch.setattr(provider, 'update_draft', blocked)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pending = pool.submit(value.update, draft['id'], request_key='live-replacement-gap-0001', body='New body')
+        assert entered.wait(5)
+        try:
+            assert not provider.drafts
+            with pytest.raises(MailboxDraftError, match='source_update_unconfirmed'):
+                service(state).preflight({'mailbox_id': 'mailbox-uuid', 'message_id_header': TARGET})
+            with pytest.raises(MailboxDraftError, match='source_operation_unconfirmed'):
+                prepare(service(state), 'racing-prepare-gap-key-0001')
+        finally:
+            release.set()
+        saved = pending.result(timeout=5)
+    assert saved['id'] != draft['id'] and provider.creations == 2 and len(provider.drafts) == 1
+    assert value.operation('live-replacement-gap-0001')['stage'] == 'completed'
+    assert value.get(saved['id'])['body'].strip() == 'New body'
+
+
+def test_sent_cleanup_failure_is_persisted_and_only_original_send_can_finish_it(state):
+    value = service(state)
+    draft = prepare(value)
+    provider = state[1]
+    provider.fail_retirement = True
+    initial = value.send(draft['id'], 'cleanup-recovery-send-key-0001')
+    assert initial['state'] == 'sent' and not initial['ok']
+    assert initial['effect_certainty'] == 'verified'
+    assert initial['cause'] == 'draft_retirement_unconfirmed'
+    assert provider.transmissions == 1 and len(provider.drafts) == 1
+    receipt = value.operation('cleanup-recovery-send-key-0001')
+    assert receipt['stage'] == 'completed' and receipt['result']['draft_cleanup']['state'] == 'pending'
+    with pytest.raises(MailboxDraftError, match='draft_send_operation_unconfirmed'):
+        service(state).update(draft['id'], body='Do not turn a sent leftover into a fresh message')
+    provider.fail_retirement = False
+    attempts = provider.retirement_attempts
+    observed = service(state).send_status(draft['id'], 'cleanup-recovery-send-key-0001')
+    assert observed['state'] == 'sent' and not observed['ok']
+    assert provider.retirement_attempts == attempts and provider.drafts
+    finished = service(state).send(draft['id'], 'cleanup-recovery-send-key-0001')
+    assert finished['ok'] and finished['draft_cleanup']['state'] == 'completed'
+    assert provider.transmissions == 1 and not provider.drafts
+    assert service(state).send(draft['id'], 'different-key-after-cleanup-0001')['message_id'] == initial['message_id']
+    assert provider.transmissions == 1
+
+
+def test_post_sent_cleanup_never_retires_an_external_replacement(state):
+    value = service(state)
+    draft = prepare(value)
+    provider = state[1]
+    provider.visible = False
+    pending = value.send(draft['id'], 'replace-before-retirement-key-0001')
+    assert pending['state'] == 'unconfirmed' and provider.transmissions == 1
+    provider.update_draft('native-draft', build(OWNER, to=['edited@example.test'], subject='Later edit',
+        body='Do not retire this different current message', in_reply_to=TARGET))
+    replacement = value.list()[0]
+    provider.visible = True
+    finished = service(state).send(draft['id'], 'replace-before-retirement-key-0001')
+    assert finished['ok'] and finished['draft_cleanup']['proof']['state'] == 'absent'
+    assert value.get(replacement['id'])['body'].strip() == 'Do not retire this different current message'
+    assert len(provider.drafts) == 1 and provider.transmissions == 1
+
+
+def test_update_replay_reads_its_exact_replacement_and_preserves_newer_external_edits(state):
+    value = service(state)
+    original = prepare(value)
+    saved = value.update(original['id'], request_key='replacement-result-key-0001', to=['updated@example.test'])
+    receipt = value.operation('replacement-result-key-0001')
+    assert receipt['draft_id'] == saved['id'] and receipt['target'] == original['id']
+    assert saved['source_id'] == 'source-uuid'
+    replay = service(state).update(original['id'], request_key='replacement-result-key-0001', to=['updated@example.test'])
+    assert replay['id'] == saved['id'] and state[1].creations == 2
+    provider = state[1]
+    provider.update_draft(saved['provider_draft_id'], build(OWNER, to=['external@example.test'], subject='External edit',
+        body='Later saved replacement', in_reply_to=TARGET))
+    with pytest.raises(MailboxDraftError, match='draft_no_longer_available'):
+        service(state).update(original['id'], request_key='replacement-result-key-0001', to=['updated@example.test'])
+    assert value.list()[0]['to'] == ['external@example.test'] and provider.creations == 3
+
+
+def test_replacement_receipt_and_sending_proof_do_not_store_editable_mime(state):
+    value = service(state)
+    draft = prepare(value)
+    updated = value.update(draft['id'], request_key='private-proof-update-key-0001', body='Confidential replacement text')
+    state[1].visible = False
+    value.send(updated['id'], 'private-proof-send-key-0001')
+    with state[0].connect() as conn:
+        receipts = [dict(v) for v in conn.execute(select(RECEIPTS)).mappings()]
+    assert 'Confidential replacement text' not in repr(receipts)
+    assert 'Original body' not in repr(receipts)
+    assert all('raw' not in json.loads(v['result'] or '{}') for v in receipts)
+
+
+def test_actual_process_restart_finishes_sent_retirement_without_smtp(tmp_path):
+    script = r'''
+import json, os, sys
+from sqlalchemy import create_engine
+from tests.mailbox_drafts.test_mailbox_service import DiskProvider, service, prepare
+phase, database, mailbox = sys.argv[1:]
+provider = DiskProvider(mailbox)
+provider.fail_retirement = phase == 'initial'
+value = service((create_engine('sqlite:///' + database), provider))
+key = 'process-cleanup-send-key-0001'
+if phase == 'initial':
+    draft_id = prepare(value)['id']
+else:
+    draft_id = value.operation(key)['target']
+result = value.send_status(draft_id, key) if phase == 'observe' else value.send(draft_id, key)
+print(json.dumps({'pid': os.getpid(), 'result': result, 'smtp': provider.transmissions,
+    'drafts': len(provider.drafts), 'sent': len(provider.outgoing), 'trash': len(provider.trashed)}))
+'''
+    values = []
+    for phase in ('initial', 'observe', 'resume', 'resume'):
+        run = subprocess.run([sys.executable, '-c', script, phase,
+            str(tmp_path / 'engine.db'), str(tmp_path / 'provider.json')],
+            cwd=Path(__file__).resolve().parents[2], env=os.environ.copy(),
+            text=True, capture_output=True, check=True, timeout=30)
+        values.append(json.loads(run.stdout))
+    assert len({v['pid'] for v in values}) == 4
+    assert [v['result']['ok'] for v in values] == [False, False, True, True]
+    assert [v['drafts'] for v in values] == [1, 1, 0, 0]
+    assert [v['trash'] for v in values] == [0, 0, 1, 1]
+    assert all(v['smtp'] == v['sent'] == 1 for v in values)
+    assert len({v['result']['message_id'] for v in values}) == 1
+    assert len({v['result']['operation_id'] for v in values}) == 1
+
+
+def test_followup_close_failure_cannot_demote_a_verified_create_or_repeat_append(state, monkeypatch):
+    value = service(state)
+    provider = state[1]
+    key = 'prepare-operation-0001'
+    def close_failure():
+        receipt = value.operation(key)
+        if receipt and receipt['stage'] == 'completed':
+            raise TimeoutError('The verified operation closed unsuccessfully')
+    monkeypatch.setattr(provider, 'close', close_failure)
+    with pytest.raises(MailboxDraftError) as error:
+        prepare(value)
+    assert error.value.details['outcome']['effect_certainty'] == 'verified'
+    assert value.operation(key)['stage'] == 'completed' and provider.creations == 1
+    monkeypatch.setattr(provider, 'close', lambda: None)
+    recovered = prepare(service(state))
+    assert not recovered['created'] and provider.creations == 1
+
+
+def test_lost_create_ack_preserves_original_source_identity_and_never_reappends(state, monkeypatch):
+    value = service(state)
+    provider = state[1]
+    actual = provider.create_draft
+    def lost_ack(*args, **kwargs):
+        actual(*args, **kwargs)
+        raise TimeoutError('Provider stored the draft before the connection closed')
+    monkeypatch.setattr(provider, 'create_draft', lost_ack)
+    with pytest.raises(MailboxDraftError):
+        prepare(value)
+    saved = prepare(service(state))
+    assert saved['source_id'] == 'source-uuid' and not saved['created']
+    assert provider.creations == 1 and len(provider.drafts) == 1

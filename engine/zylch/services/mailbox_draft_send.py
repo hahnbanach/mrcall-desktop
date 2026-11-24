@@ -1,4 +1,4 @@
-"""Single native dispatch and Sent reconciliation, without retrying a mutation."""
+"""Single SMTP dispatch, exact Sent reconciliation and recoverable draft retirement."""
 
 from datetime import timezone
 from email.utils import getaddresses, parsedate_to_datetime
@@ -6,23 +6,51 @@ from email.utils import getaddresses, parsedate_to_datetime
 from .mailbox_draft_mime import MailboxDraftError, build, native_id, parse, sending_raw
 
 
-def confirm(service, receipt):
-    # Even a completed local receipt is checked against the provider. It is an
-    # operation identity, not an independent archive of what was delivered.
+def confirm(service, receipt, *, retire=False):
+    """Observe Sent; only an explicit original send may finish its cleanup."""
     if receipt["stage"] in {"reserved", "not_dispatched"}:
         return receipt["result"] or service._outcome(receipt, cause="send_not_dispatched")
+    metadata = {name: receipt["result"][name] for name in ("draft_identity", "draft_cleanup")
+                if name in (receipt.get("result") or {})}
     try:
         with service.provider() as client:
             matches = client.sent(receipt["message_id"])
-        if len(matches) != 1:
-            raise MailboxDraftError("sent_not_yet_confirmed" if not matches else "sent_identity_ambiguous")
-        result = service._outcome(receipt, ok=True, state="sent", sent={
-            "id": matches[0]["message_id"], "message_id": receipt["message_id"],
-        })
-        service.operations.advance(receipt, None, "completed", result=result)
-        return result
+            if len(matches) != 1:
+                raise MailboxDraftError("sent_not_yet_confirmed" if not matches else "sent_identity_ambiguous")
+            result = service._outcome(receipt, ok=True, state="sent", sent={
+                "id": matches[0]["message_id"], "message_id": receipt["message_id"],
+            }, **metadata)
+            identity = metadata.get("draft_identity")
+            # Imported legacy sends never had an IMAP draft to retire. The
+            # original generated Message-ID remains their only delivery claim.
+            if receipt["kind"] != "send" or not isinstance(identity, dict):
+                service.operations.advance(receipt, None, "completed", result=result)
+                return result
+            cleanup = metadata.get("draft_cleanup") or {}
+            if cleanup.get("state") == "completed":
+                service.operations.advance(receipt, None, "completed", result=result)
+                return result
+            result.update(ok=False, cause="draft_retirement_unconfirmed", effect_certainty="verified",
+                          draft_cleanup={"state": "pending"})
+            receipt = service.operations.advance(receipt, None, "completed", result=result)
+            if not retire:
+                return result
+            try:
+                proof = client.retire_sent_draft(native_id(service.owner, receipt["target"]),
+                                                  expected_identity=identity)
+                if not proof.get("ok"):
+                    raise MailboxDraftError("draft_retirement_unconfirmed")
+            except Exception as error:
+                result["retirement_cause"] = service._cause(error)
+                service.operations.advance(receipt, None, "completed", result=result)
+                return result
+            result.update(ok=True, draft_cleanup={"state": "completed", "proof": proof})
+            result.pop("cause", None)
+            result.pop("retirement_cause", None)
+            service.operations.advance(receipt, None, "completed", result=result)
+            return result
     except Exception as error:
-        result = service._outcome(receipt, state="unconfirmed", cause=service._cause(error))
+        result = service._outcome(receipt, state="unconfirmed", cause=service._cause(error), **metadata)
         if receipt["stage"] == "dispatch_possible":
             service.operations.advance(receipt, None, "unconfirmed", result=result)
         return result
@@ -51,29 +79,29 @@ def send(service, draft_id, request_key):
     if previous is not None:
         if previous["kind"] != "send" or previous["target"] != draft_id:
             raise MailboxDraftError("request_key_payload_conflict")
-        return confirm(service, previous)
+        return confirm(service, previous, retire=True)
     previous = service.operations.for_draft(service.owner, draft_id)
     if previous is not None:
-        return confirm(service, previous)
-    # The current immutable container is read before claiming the operation so
+        return confirm(service, previous, retire=True)
+    # The current exact IMAP message is read before claiming the operation so
     # every send path shares the exact RFC inbound identity in its durable fence.
     with service.provider() as client:
         current = client.get_draft(identifier)
     if current is None:
         previous = service.operations.for_draft(service.owner, draft_id)
         if previous is not None:
-            return confirm(service, previous)
+            return confirm(service, previous, retire=True)
         provenance = service.operations.provenance(service.owner, draft_id)
         receipt, token = service._reserve(request_key, "send", draft_id,
                                           provenance["source"] if provenance else "", [draft_id])
         if token is None:
-            return confirm(service, receipt)
+            return confirm(service, receipt, retire=True)
         return service._failure(receipt, token, MailboxDraftError("named_draft_not_found"), dispatched=False)
     draft = service.present(current)
     receipt, token = service._reserve(request_key, "send", draft_id,
                                       draft.get("in_reply_to") or "", [draft_id])
     if token is None:
-        return confirm(service, receipt)
+        return confirm(service, receipt, retire=True)
     dispatched = False
     try:
         with service.provider() as client:
@@ -84,16 +112,19 @@ def send(service, draft_id, request_key):
             if (draft.get("in_reply_to") or "") != receipt["source"]:
                 raise MailboxDraftError("draft_source_changed_before_send")
             raw = sending_raw(service.owner, current["raw"], receipt["message_id"])
-            receipt = service.operations.advance(receipt, token, "dispatch_possible")
+            identity = service.identity(current)
+            receipt = service.operations.advance(receipt, token, "dispatch_possible",
+                result=service._outcome(receipt, state="unconfirmed", draft_identity=identity,
+                                       draft_cleanup={"state": "pending"}))
             with service._policy(draft):
-                # Native send consumes this exact draft container. A 404 can
-                # never fall back to messages.send or to recreating the draft.
+                # SMTP does not consume a draft. The exact snapshot is checked
+                # again by the transport; retirement follows Sent proof only.
                 dispatched = True
-                client.send_draft(identifier, raw)
-        return confirm(service, receipt)
+                client.send_draft(identifier, raw, expected_identity=identity)
+        return confirm(service, receipt, retire=True)
     except Exception as error:
         result = service._failure(receipt, token, error, dispatched=dispatched)
-        return confirm(service, service.operation(receipt["request_key"])) if dispatched and not getattr(error, "non_dispatch", False) else result
+        return confirm(service, service.operation(receipt["request_key"]), retire=True) if dispatched and not getattr(error, "non_dispatch", False) else result
 
 
 def send_message(service, to, subject, body, *, request_key, cc=None, bcc=None,
@@ -146,7 +177,7 @@ def _date(message):
 
 
 def answered(service, source):
-    """Observe current Sent in the native conversation before composing.
+    """Observe current Sent in the mailbox conversation before composing.
 
     Company-member answers outside this mailbox still pass through the existing
     assignment projection, which owns trusted member identity and coverage.

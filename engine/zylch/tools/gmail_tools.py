@@ -656,7 +656,7 @@ class ListDraftsTool(Tool):
 
 
 class UpdateDraftTool(Tool):
-    """Update an existing draft in database."""
+    """Replace a mailbox draft and return its current exact handle."""
 
     def __init__(self, storage, owner_id: str):
         super().__init__(
@@ -709,7 +709,10 @@ class UpdateDraftTool(Tool):
                     a.strip() for a in bcc if isinstance(a, str) and a.strip()
                 ]
 
-            self.storage.update_draft(self.owner_id, draft_id, update_data)
+            changed = self.storage.update_draft(self.owner_id, draft_id, update_data)
+            if changed is None:
+                raise ValueError("The named mailbox draft is no longer available")
+            draft_id = changed["id"]
 
             updates = []
             if to:
@@ -942,7 +945,10 @@ class SendDraftTool(Tool):
                      {"to": to, "subject": subject, "body": body, "cc": cc, "bcc": bcc}.items()
                      if value is not None}
             if edits:
-                await asyncio.to_thread(service.update, draft_id, **edits)
+                changed = await asyncio.to_thread(service.update, draft_id, **edits)
+                if changed is None:
+                    raise ValueError("The named mailbox draft is no longer available")
+                draft_id = changed["id"]
             from uuid import uuid4
             # Each newly approved action is an attempt. The durable per-draft
             # fence returns any earlier uncertain/confirmed send across keys.

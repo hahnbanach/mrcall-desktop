@@ -172,6 +172,8 @@ const api = {
       call<MailboxDraftResult>('drafts.update', params, 60000),
     send: (draftId: string, requestKey: string) =>
       call<MailboxDraftOutcome>('drafts.send', { draft_id: draftId, request_key: requestKey }, 120000),
+    sendStatus: (draftId: string, requestKey: string) =>
+      call<MailboxDraftOutcome>('drafts.send_status', { draft_id: draftId, request_key: requestKey }, 60000),
     trash: (draftId: string, requestKey: string) =>
       call<MailboxDraftOutcome>('drafts.trash', { draft_id: draftId, request_key: requestKey }, 60000)
   },

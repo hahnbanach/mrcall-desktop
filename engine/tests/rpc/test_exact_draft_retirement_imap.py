@@ -1,30 +1,31 @@
 """Real IMAP adapter bounded complete candidate inventories and MOVE."""
 
 from email import policy
+from email.message import EmailMessage
 from email.parser import BytesParser
 import sqlite3
 import pytest
-from tests.rpc.test_exact_draft_retirement import (
-    setup as recovery_setup,
-    invoke,
-    move_count,
-    RecoveryMailbox,
-    OWNER,
-)
 
 
-@pytest.fixture
-def setup(tmp_path, monkeypatch):
-    yield from recovery_setup.__wrapped__(tmp_path, monkeypatch)
-
-
-def test_real_imap_move_adapter_and_complete_uid_fetch(setup, monkeypatch):
+def test_real_imap_move_adapter_and_complete_uid_fetch(tmp_path, monkeypatch):
     from types import SimpleNamespace
     from zylch.email import mailboxes
     from zylch.services.exact_draft_retirement_imap import RetirementMailbox
 
-    row, path = setup
-    with sqlite3.connect(path / "provider.db") as conn:
+    message = EmailMessage(policy=policy.SMTP)
+    message["From"] = "owner@example.test"
+    message["To"] = "recipient@example.test"
+    message["Subject"] = "Synthetic IMAP adapter fixture"
+    message["Message-ID"] = "<adapter-fixture@example.test>"
+    message.set_content("Synthetic adapter body")
+    raw_message = message.as_bytes()
+    path = tmp_path / "provider.db"
+    moves = []
+    with sqlite3.connect(path) as conn:
+        for table in ("copies", "sent", "trash"):
+            conn.execute(f"CREATE TABLE {table}(id INTEGER PRIMARY KEY, raw BLOB NOT NULL)")
+        conn.execute("INSERT INTO copies(raw) VALUES (?)", (raw_message,))
+        conn.execute("INSERT INTO sent(raw) VALUES (?)", (raw_message,))
         for table in ("sent", "trash"):
             conn.executemany(
                 f"INSERT INTO {table}(raw) VALUES (?)",
@@ -45,7 +46,7 @@ def test_real_imap_move_adapter_and_complete_uid_fetch(setup, monkeypatch):
 
         def uid(self, command, *args):
             table = {"Drafts": "copies", "Sent": "sent", "Trash": "trash"}[self.folder]
-            with sqlite3.connect(path / "provider.db") as conn:
+            with sqlite3.connect(path) as conn:
                 rows = conn.execute(f"SELECT id,raw FROM {table} ORDER BY id").fetchall()
             if command == "SEARCH":
                 if self.folder in {"Sent", "Trash"}:
@@ -73,8 +74,13 @@ def test_real_imap_move_adapter_and_complete_uid_fetch(setup, monkeypatch):
                 ]
             assert command == "MOVE"
             assert self.folder == "Drafts" and args[1] == '"Trash"'
-            acknowledgment = RecoveryMailbox(OWNER).move({"uid": args[0]}, {})
-            return "OK", [f"[COPYUID 7 1 {acknowledgment['copyuid']['uid']}] moved".encode()]
+            with sqlite3.connect(path) as conn:
+                original = conn.execute("SELECT raw FROM copies WHERE id=?", (args[0],)).fetchone()
+                assert original is not None
+                destination = conn.execute("INSERT INTO trash(raw) VALUES (?)", original).lastrowid
+                assert conn.execute("DELETE FROM copies WHERE id=?", (args[0],)).rowcount == 1
+            moves.append(str(args[0]))
+            return "OK", [f"[COPYUID 7 {args[0]} {destination}] moved".encode()]
 
     connection = Connection()
     monkeypatch.setattr(mailboxes, "primary", lambda owner: SimpleNamespace(address=owner))
@@ -85,10 +91,32 @@ def test_real_imap_move_adapter_and_complete_uid_fetch(setup, monkeypatch):
             _ensure_connected=lambda: connection, disconnect=lambda: None
         ),
     )
-    preview = invoke(row, factory=RetirementMailbox)
-    assert preview["ok"]
-    assert invoke(row, preview["target"], True, factory=RetirementMailbox)["ok"]
-    assert move_count(path) == 1
+    mailbox = RetirementMailbox("owner@example.test")
+    try:
+        drafts, draft_scope = mailbox.inventory()
+        assert draft_scope["complete"] and [row["uid"] for row in drafts] == ["1"]
+        sent, sent_scope = mailbox.inventory(
+            "Sent", search_header="Message-ID", search_value=str(message["Message-ID"])
+        )
+        assert sent_scope["complete"] and len(sent) == 1
+        assert mailbox.inventory(
+            "Trash", search_header="Message-ID", search_value=str(message["Message-ID"])
+        )[0] == []
+        target = {"folder": draft_scope["folder"], "uidvalidity": draft_scope["uidvalidity"], "uid": "1"}
+        trash = {"folder": mailbox.folder, "uidvalidity": "7"}
+        result = mailbox.move(target, trash)
+        assert result["copyuid"] == {"uidvalidity": "7", "uid": "1002"}
+        assert mailbox.inventory()[0] == []
+        trashed, trash_scope = mailbox.inventory(
+            "Trash", search_header="Message-ID", search_value=str(message["Message-ID"])
+        )
+        assert trash_scope["complete"] and len(trashed) == 1
+        assert moves == ["1"]
+        with sqlite3.connect(path) as conn:
+            assert conn.execute("SELECT count(*) FROM sent").fetchone()[0] == 1002
+            assert conn.execute("SELECT count(*) FROM trash").fetchone()[0] == 1002
+    finally:
+        mailbox.close()
 
 
 @pytest.mark.parametrize("failure", ["aggregate-bytes", "wrong-uid", "truncated"])

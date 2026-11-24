@@ -31,8 +31,8 @@ class MailboxDrafts:
     @contextmanager
     def provider(self):
         if self.provider_factory is None:
-            from zylch.email.gmail_mailbox import GmailMailbox
-            client = GmailMailbox(self.owner)
+            from zylch.email.imap_mailbox import IMAPMailbox
+            client = IMAPMailbox(self.owner)
         else:
             client = self.provider_factory(self.owner)
         try:
@@ -60,7 +60,7 @@ class MailboxDrafts:
             return self.present(value) if value is not None else None
 
     def existing_for_source(self, in_reply_to, thread_id=None):
-        # Identity comes from native draft IDs. Headers only find existing work
+        # Exact mailbox handles identify current messages. Headers only find work
         # before composing; they never rebind a missing named draft.
         if not in_reply_to:
             return []
@@ -114,16 +114,32 @@ class MailboxDrafts:
         return {**result, **extra}
 
     def _failure(self, receipt, token, error, *, dispatched=None):
-        if getattr(error, "non_dispatch", False):
+        current = self.operation(receipt["request_key"])
+        if current is not None and current["stage"] == "completed":
+            # A failed close/read after a verified effect cannot demote that
+            # receipt and reopen dispatch. Surface the follow-up failure while
+            # retaining the completed provider identity for the original key.
+            result = {**(current["result"] or self._outcome(current)), "ok": False,
+                      "cause": self._cause(error), "effect_certainty": "verified"}
+            self.operations.advance(current, None, "completed", result=result)
+            return result
+        partial_update = (receipt["kind"] == "update" and
+                          bool((getattr(error, "progress", None) or {}).get("old_draft_retired")))
+        if partial_update:
+            previous = receipt.get("result") or {}
+            receipt = {**receipt, "result": {**previous, "update_proof": {
+                **(previous.get("update_proof") or {}),
+                "phase": "old_retired_replacement_unconfirmed"}}}
+            dispatched = True
+        elif getattr(error, "non_dispatch", False):
             dispatched = False
         stage = "not_dispatched" if receipt["stage"] == "reserved" or dispatched is False else "unconfirmed"
         result = self._outcome(receipt, state=stage, cause=self._cause(error))
         if stage == "not_dispatched":
             result["effect_certainty"] = "not-dispatched"
-        if (receipt.get("result") or {}).get("update_proof"):
-            result["update_proof"] = receipt["result"]["update_proof"]
-        if (receipt.get("result") or {}).get("provider_message_id"):
-            result["provider_message_id"] = receipt["result"]["provider_message_id"]
+        for name in ("update_proof", "draft_identity", "draft_cleanup", "provider_message_id", "source_id"):
+            if name in (receipt.get("result") or {}):
+                result[name] = receipt["result"][name]
         self.operations.advance(receipt, token, stage, result=result)
         logger.debug("[mailbox-drafts] effect failed kind=%s stage=%s cause=%s",
                      receipt["kind"], stage, result["cause"])
@@ -144,13 +160,20 @@ class MailboxDrafts:
                                         message_id=pending["message_id"])
 
     def _source_safe(self, target):
-        pending = self.operations.pending_send(self.owner, target)
+        pending = self.operations.pending_source(self.owner, target)
         if pending is not None:
-            from .mailbox_draft_send import confirm
-            result = confirm(self, pending)
+            result = self.recover(pending["request_key"])
             if not result.get("ok"):
-                raise MailboxDraftError("source_send_unconfirmed", operation_id=pending["id"],
+                kind = "send" if pending["kind"] in {"send", "send_message"} else pending["kind"]
+                raise MailboxDraftError(f"source_{kind}_unconfirmed", operation_id=pending["id"],
                                         message_id=pending["message_id"])
+
+    @staticmethod
+    def identity(value):
+        """Retain exact effect proof, without retaining any editable MIME."""
+        return {**(value.get("identity") or {}), "id": value["id"],
+                "message_id": value["message_id"],
+                "raw_sha256": hashlib.sha256(value["raw"]).hexdigest()}
 
     def create(self, to, subject, body, *, cc=None, bcc=None, in_reply_to=None,
                references=None, thread_id=None, body_format="plain", request_key=None,
@@ -181,7 +204,8 @@ class MailboxDrafts:
                 native_thread = client.thread_for_message(in_reply_to) if in_reply_to else None
                 # This marker commits before the network call and the company
                 # policy lock. A crash can never authorize a second create.
-                receipt = self.operations.advance(receipt, token, "dispatch_possible")
+                receipt = self.operations.advance(receipt, token, "dispatch_possible",
+                    result=self._outcome(receipt, state="unconfirmed", source_id=source_id))
                 with self._policy(fields):
                     dispatched = True
                     client.create_draft(raw, thread_id=native_thread)
@@ -213,39 +237,57 @@ class MailboxDrafts:
                     current = found[0] if len(found) == 1 else None
                 if current is not None:
                     presented = self.present(current)
-                    result = self._outcome(receipt, ok=True, state="draft", draft_id=presented["id"])
+                    result = self._outcome(receipt, ok=True, state="draft", draft_id=presented["id"],
+                                           source_id=(receipt.get("result") or {}).get("source_id"))
                     if receipt["stage"] in {"dispatch_possible", "unconfirmed"}:
                         self.operations.advance(receipt, None, "completed", result=result,
                                                 draft_id=presented["id"])
+                        presented = self.present(current)
                     return {**result, "draft": presented}
                 return self._outcome(receipt, cause="draft_no_longer_available" if
                                      receipt["stage"] == "completed" else "draft_creation_unconfirmed")
-        if receipt["kind"] == "update" and receipt["stage"] in {"dispatch_possible", "unconfirmed"}:
+        if receipt["kind"] == "update":
             proof = (receipt["result"] or {}).get("update_proof")
+            if receipt["stage"] == "completed":
+                current = self.get(receipt["draft_id"] or receipt["target"])
+                if current is not None:
+                    return {**(receipt["result"] or self._outcome(receipt, ok=True, state="draft")),
+                            "draft": current}
+                return self._outcome(receipt, cause="draft_no_longer_available")
+            if receipt["stage"] not in {"dispatch_possible", "unconfirmed"}:
+                return receipt["result"] or self._outcome(receipt, cause="draft_update_not_dispatched")
             if not isinstance(proof, dict):
                 return self._outcome(receipt, cause="draft_update_unconfirmed")
             fields = proof.get("fields")
             if (not isinstance(fields, list) or not fields or set(fields) - {"to", "cc", "bcc", "subject", "body", "body_format"}):
                 raise MailboxDraftError("draft_update_proof_unreadable")
             with self.provider() as client:
-                current = client.get_draft(native_id(self.owner, receipt["target"]))
-                if current is not None:
+                found = client.find_drafts(receipt["message_id"])
+                if len(found) == 1 and client.get_draft(native_id(self.owner, receipt["target"])) is None:
+                    current = found[0]
                     message = parse(current["raw"])
                     presented = self.present(current)
                     if (message.get_all("X-MrCall-Draft-Update", []) == [receipt["id"]]
+                            and str(message.get("Message-ID") or "") == receipt["message_id"]
                             and digest({name: presented.get(name) for name in fields}) == proof.get("fields_digest")):
-                        result = self._outcome(receipt, ok=True, state="draft", draft_id=presented["id"], update_proof=proof)
-                        self.operations.advance(receipt, None, "completed", result=result)
+                        completed_proof = {**proof, "phase": "replacement_confirmed",
+                                           "new_identity": self.identity(current)}
+                        result = self._outcome(receipt, ok=True, state="draft", draft_id=presented["id"],
+                                               update_proof=completed_proof,
+                                               source_id=(receipt.get("result") or {}).get("source_id"))
+                        self.operations.advance(receipt, None, "completed", result=result,
+                                                draft_id=presented["id"])
                         return {**result, "draft": presented}
             return self._outcome(receipt, cause="draft_update_unconfirmed", update_proof=proof)
         if receipt["kind"] == "trash" and receipt["stage"] in {"dispatch_possible", "unconfirmed"}:
+            identity = (receipt["result"] or {}).get("draft_identity")
+            if not isinstance(identity, dict):
+                return self._outcome(receipt, cause="draft_trash_unconfirmed")
             with self.provider() as client:
-                current = client.get_draft(native_id(self.owner, receipt["target"]))
-                message_id = (receipt["result"] or {}).get("provider_message_id")
-                observed = client.get_message(message_id) if message_id else None
-                if current is None and observed is not None and "TRASH" in observed.get("labels", []):
-                    result = self._outcome(receipt, ok=True, state="trashed",
-                                           provider_message_id=message_id)
+                proof = client.recover_trash(identity)
+                if proof.get("ok"):
+                    result = self._outcome(receipt, ok=True, state="trashed", trash=proof,
+                                           draft_identity=identity)
                     self.operations.advance(receipt, None, "completed", result=result)
                     return result
         return receipt["result"] or self._outcome(receipt, cause="mailbox_operation_unconfirmed")
@@ -278,12 +320,16 @@ class MailboxDrafts:
                 current = client.get_draft(identifier)
                 if current is None:
                     raise MailboxDraftError("named_draft_not_found", draft_id=draft_id)
-                pending = self._outcome(receipt, state="unconfirmed",
+                identity = self.identity(current)
+                pending = self._outcome(receipt, state="unconfirmed", draft_identity=identity,
                                         provider_message_id=current["message_id"])
                 receipt = self.operations.advance(receipt, token, "dispatch_possible", result=pending)
                 dispatched = True
-                proof = client.trash_draft(identifier)
-                result = self._outcome(receipt, ok=True, state="trashed", trash=proof)
+                proof = client.trash_draft(identifier, expected_identity=identity)
+                if not proof.get("ok"):
+                    raise MailboxDraftError("draft_trash_unconfirmed")
+                result = self._outcome(receipt, ok=True, state="trashed", trash=proof,
+                                       draft_identity=identity)
                 self.operations.advance(receipt, token, "completed", result=result)
                 return result
         except Exception as error:
@@ -291,10 +337,26 @@ class MailboxDrafts:
 
     def update(self, draft_id, *, request_key=None, **fields):
         identifier = native_id(self.owner, draft_id)
+        request_key = request_key or str(uuid4())
+        previous = self.operation(request_key)
+        if previous is not None:
+            if (previous["kind"] != "update" or previous["target"] != draft_id
+                    or previous["payload_digest"] != digest(fields)):
+                raise MailboxDraftError("request_key_payload_conflict")
+            recovered = self.recover(request_key)
+            if recovered.get("draft") is not None:
+                return recovered["draft"]
+            raise MailboxDraftError(recovered.get("cause") or "draft_update_unconfirmed", outcome=recovered)
         self._updates_safe(draft_id)
-        receipt, token = self._reserve(request_key, "update", draft_id, "", fields)
+        with self.provider() as client:
+            observed = client.get_draft(identifier)
+        source = self.present(observed).get("in_reply_to") if observed is not None else ""
+        receipt, token = self._reserve(request_key, "update", draft_id, source or "", fields)
         if token is None:
-            return self.get(draft_id) if receipt["stage"] == "completed" else self.recover(receipt["request_key"])
+            recovered = self.recover(receipt["request_key"])
+            if recovered.get("draft") is not None:
+                return recovered["draft"]
+            raise MailboxDraftError(recovered.get("cause") or "draft_update_unconfirmed", outcome=recovered)
         dispatched = False
         try:
             with self.provider() as client:
@@ -302,39 +364,57 @@ class MailboxDrafts:
                 if value is None:
                     raise MailboxDraftError("named_draft_not_found", draft_id=draft_id)
                 old = self.present(value)
+                if (old.get("in_reply_to") or "") != receipt["source"]:
+                    raise MailboxDraftError("draft_source_changed_before_update")
                 if old["attachments"]:
                     raise MailboxDraftError("draft_attachments_not_supported")
                 allowed = {"to", "cc", "bcc", "subject", "body", "body_format"}
                 if set(fields) - allowed:
                     raise MailboxDraftError("unsupported_draft_update_fields")
                 if not fields:
-                    self.operations.advance(receipt, token, "completed",
+                    self.operations.advance(receipt, token, "completed", draft_id=draft_id,
                         result=self._outcome(receipt, ok=True, state="draft", draft_id=draft_id))
                     return old
                 raw = update_raw(value["raw"], fields)
                 desired = self.present({**value, "raw": raw})
                 message = parse(raw)
-                while "X-MrCall-Draft-Update" in message:
-                    del message["X-MrCall-Draft-Update"]
-                message["X-MrCall-Draft-Update"] = receipt["id"]
+                for name, replacement in (("X-MrCall-Draft-Update", receipt["id"]),
+                                          ("Message-ID", receipt["message_id"])):
+                    while name in message:
+                        del message[name]
+                    message[name] = replacement
                 raw = message.as_bytes(policy=policy.SMTP)
-                proof = {"fields": sorted(fields),
+                identity = self.identity(value)
+                proof = {"fields": sorted(fields), "old_identity": identity,
+                         "phase": "replacement_possible",
                          "fields_digest": digest({name: desired.get(name) for name in fields})}
                 receipt = self.operations.advance(receipt, token, "dispatch_possible",
-                    result=self._outcome(receipt, state="unconfirmed", update_proof=proof))
+                    result=self._outcome(receipt, state="unconfirmed", update_proof=proof,
+                                         source_id=old.get("source_id")))
+                # Both exact retirement and one APPEND may occur after this marker.
+                # Uncertainty never retries APPEND or releases the source fence.
                 dispatched = True
-                client.update_draft(identifier, raw, thread_id=value["thread_id"])
-                fresh = client.get_draft(identifier)
-                if fresh is None or hashlib.sha256(fresh["raw"]).digest() != hashlib.sha256(raw).digest():
-                    # Gmail can normalize MIME on save. Compare the public
-                    # content rather than requiring byte-for-byte transport.
-                    public = self.present(fresh) if fresh else None
-                    if public is None or any(public.get(k) != desired.get(k) for k in fields):
-                        raise MailboxDraftError("draft_update_unconfirmed")
-                result = self._outcome(receipt, ok=True, state="draft", draft_id=draft_id)
-                self.operations.advance(receipt, token, "completed", result=result)
+                fresh = client.update_draft(identifier, raw, thread_id=value["thread_id"],
+                                             expected_identity=identity)
+                if fresh is None:
+                    found = client.find_drafts(receipt["message_id"])
+                    fresh = found[0] if len(found) == 1 else None
+                if fresh is None or client.get_draft(identifier) is not None:
+                    raise MailboxDraftError("draft_update_unconfirmed")
+                public = self.present(fresh)
+                saved = parse(fresh["raw"])
+                if (str(saved.get("Message-ID") or "") != receipt["message_id"]
+                        or saved.get_all("X-MrCall-Draft-Update", []) != [receipt["id"]]
+                        or any(public.get(k) != desired.get(k) for k in fields)):
+                    raise MailboxDraftError("draft_update_unconfirmed")
+                proof = {**proof, "phase": "replacement_confirmed", "new_identity": self.identity(fresh)}
+                result = self._outcome(receipt, ok=True, state="draft", draft_id=public["id"],
+                                       update_proof=proof, source_id=old.get("source_id"))
+                self.operations.advance(receipt, token, "completed", result=result, draft_id=public["id"])
                 return self.present(fresh)
         except Exception as error:
+            # A provider rejection after retirement cannot mean the whole
+            # replacement was not dispatched. The old item remains recoverable.
             result = self._failure(receipt, token, error, dispatched=dispatched)
             raise MailboxDraftError(result["cause"], outcome=result) from error
 

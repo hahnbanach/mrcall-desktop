@@ -116,6 +116,13 @@ class MailboxOperations:
                 ).order_by(RECEIPTS.c.created_at)).mappings().first()
                 if prior_send is not None:
                     return _public(prior_send), None
+            if kind == "update":
+                sent_target = conn.execute(select(RECEIPTS.c.id).where(
+                    RECEIPTS.c.owner == owner, RECEIPTS.c.target == target,
+                    RECEIPTS.c.kind == "send", RECEIPTS.c.stage != "not_dispatched",
+                ).limit(1)).first()
+                if sent_target is not None:
+                    raise ReceiptConflict("draft_send_operation_unconfirmed")
             if kind == "trash":
                 prior_trash = conn.execute(select(RECEIPTS).where(
                     RECEIPTS.c.owner == owner, RECEIPTS.c.target == target,
@@ -133,7 +140,7 @@ class MailboxOperations:
                 ).order_by(RECEIPTS.c.created_at)).first()
                 if active_target is not None:
                     raise ReceiptConflict(f"draft_{active_target.kind}_operation_unconfirmed")
-            if source and kind in {"create", "send", "send_message"}:
+            if source and kind in {"create", "update", "send", "send_message"}:
                 active = conn.execute(select(RECEIPTS.c.id).where(
                     RECEIPTS.c.owner == owner, RECEIPTS.c.source == source,
                     RECEIPTS.c.stage.in_(["reserved", "dispatch_possible", "unconfirmed"]),
@@ -180,7 +187,8 @@ class MailboxOperations:
         with self.engine.connect() as conn:
             rows = conn.execute(select(RECEIPTS).where(
                 RECEIPTS.c.owner == owner, RECEIPTS.c.draft_id == draft_id,
-                RECEIPTS.c.kind == "create",
+                RECEIPTS.c.kind.in_(["create", "update"]),
+                RECEIPTS.c.stage == "completed",
             )).mappings().all()
         return _public(rows[0]) if rows else None
 
@@ -193,6 +201,18 @@ class MailboxOperations:
                 RECEIPTS.c.request_key.like("legacy-send:%"),
                 RECEIPTS.c.stage.in_(["reserved", "dispatch_possible", "unconfirmed"]),
             )).mappings().all()
+        return _public(rows[0]) if rows else None
+
+    def pending_source(self, owner, source):
+        """Keep preparation and partial replacement fenced across an empty Drafts gap."""
+        if not source:
+            return None
+        with self.engine.connect() as conn:
+            rows = conn.execute(select(RECEIPTS).where(
+                RECEIPTS.c.owner == owner, RECEIPTS.c.source == source,
+                RECEIPTS.c.kind.in_(["create", "update", "send", "send_message"]),
+                RECEIPTS.c.stage.in_(["reserved", "dispatch_possible", "unconfirmed"]),
+            ).order_by(RECEIPTS.c.created_at)).mappings().all()
         return _public(rows[0]) if rows else None
 
     def pending_send(self, owner, source):
