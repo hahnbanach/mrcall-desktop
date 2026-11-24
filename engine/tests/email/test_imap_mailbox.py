@@ -42,6 +42,10 @@ class Wire:
     def list(self):
         return "OK", [f'(\\{name}) "/" "{name}"'.encode() for name in self.rows]
 
+    def capability(self):
+        return "OK", [b"IMAP4rev1 " + b" ".join(
+            token.encode() if isinstance(token, str) else token for token in self.capabilities)]
+
     def select(self, folder, readonly=False):
         self.folder = folder.strip('"')
         self.untagged_responses["UIDVALIDITY"] = [self.validity[self.folder].encode()]
@@ -257,9 +261,19 @@ def test_default_factory_uses_existing_password_and_dedicated_locked_clients(mon
     monkeypatch.setenv("EMAIL_PASSWORD", "fixture-only")
     monkeypatch.setattr(mailboxes, "primary", lambda owner: mailbox)
     class SocketWire(Wire):
+        # imaplib's constructor stores pre-login capabilities as strings.
+        capabilities = ("IMAP4REV1", "AUTH=XOAUTH2")
+
         def __init__(self):
             super().__init__()
             self.sock = socket.socket()
+            self.capability_calls = 0
+            self.untagged_responses["CAPABILITY"] = [b"IMAP4rev1 AUTH=XOAUTH2"]
+
+        def capability(self):
+            self.capability_calls += 1
+            buffered = self.untagged_responses.pop("CAPABILITY", [])
+            return "OK", buffered + [b"IMAP4rev1 UIDPLUS MOVE X-GM-EXT-1"]
 
         def logout(self):
             self.sock.close()
@@ -275,9 +289,15 @@ def test_default_factory_uses_existing_password_and_dedicated_locked_clients(mon
     try:
         assert first.client is not second.client and first.conn is not second.conn
         assert first.client.password == "fixture-only"
+        assert first.conn.capability_calls == second.conn.capability_calls == 1
+        assert "MOVE" not in first.conn.capabilities
+        assert first.can_move and first.gmail_extensions
+        assert first.capabilities == frozenset({"IMAP4REV1", "UIDPLUS", "MOVE", "X-GM-EXT-1"})
         assert first.client._imap_lock._is_owned() and second.client._imap_lock._is_owned()
         first.conn.add(mime())
         assert len(first.list_drafts()) == 1 and second.list_drafts() == []
+        draft, = first.list_drafts()
+        assert first.trash_draft(draft["id"])["ok"] and first.conn.moves == 1
         first.close()
         assert first.client._conn is None and second.client._conn is second.conn
         assert first.conn.sock.fileno() == -1 and second.conn.sock.fileno() >= 0
@@ -287,6 +307,44 @@ def test_default_factory_uses_existing_password_and_dedicated_locked_clients(mon
     finally:
         first.close()
         second.close()
+
+
+@pytest.mark.parametrize("response", [
+    None, (), ("OK",), ("OK", [], "unexpected"),
+    ("NO", [b"IMAP4rev1 MOVE"]), ("BAD", [b"IMAP4rev1 MOVE"]),
+    ("OK", None), ("OK", []), ("OK", [None]), ("OK", ["IMAP4rev1 MOVE"]),
+    ("OK", [b"IMAP4rev1", b"MOVE"]), ("OK", [b""]),
+    ("OK", [b"IMAP4rev1 MOVE\r\n"]), ("OK", [b"IMAP4rev1  MOVE"]),
+    ("OK", [b'IMAP4rev1 "MOVE"']), ("OK", [b"MOVE"]),
+    ("OK", [b"IMAP4rev1 \xff"]), ("OK", [b"IMAP4rev1 MOVE\t"]),
+    ("OK", [b"IMAP4rev1 " + b"a" * 65536]),
+])
+def test_fresh_capability_refusal_never_falls_back_to_cached_extensions(response):
+    wire = Wire()
+    wire.capability = lambda: response
+    with pytest.raises(MailboxProviderError, match="imap_capability_") as failure:
+        provider(wire)
+    assert failure.value.non_dispatch is True
+    assert wire.moves == wire.appends == 0
+
+
+def test_authenticated_capability_failure_is_neutral_and_known_before_effect():
+    wire = Wire()
+    def failed():
+        raise OSError("Synthetic private provider exception")
+    wire.capability = failed
+    with pytest.raises(MailboxProviderError, match="imap_capability_unavailable") as failure:
+        provider(wire)
+    assert failure.value.non_dispatch and "private" not in str(failure.value)
+    assert wire.moves == wire.appends == 0
+
+
+def test_authenticated_capabilities_can_remove_stale_cached_extensions():
+    wire = Wire()
+    wire.capability = lambda: ("OK", [b"IMAP4rev1 UIDPLUS"])
+    mailbox = provider(wire)
+    assert mailbox.capabilities == frozenset({"IMAP4REV1", "UIDPLUS"})
+    assert not mailbox.can_move and not mailbox.gmail_extensions
 
 
 def test_close_disconnects_even_when_deadline_scope_failure_is_surfaced():

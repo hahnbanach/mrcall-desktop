@@ -57,16 +57,44 @@ class IMAPMailbox(IMAPProtocol):
             self._scope = client.provider_deadline(self._deadline) if hasattr(client, "provider_deadline") else nullcontext()
             self._scope.__enter__()
             self.conn = client._ensure_connected()
-            capabilities = {c.decode().upper() if isinstance(c, bytes) else str(c).upper()
-                            for c in getattr(self.conn, "capabilities", [])}
-            self.gmail_extensions = "X-GM-EXT-1" in capabilities
-            self.can_move = "MOVE" in capabilities
+            # imaplib caches its greeting-time capabilities before LOGIN.
+            # Extensions enabled after authentication require a fresh command.
+            self.capabilities = self._authenticated_capabilities()
+            self.gmail_extensions = "X-GM-EXT-1" in self.capabilities
+            self.can_move = "MOVE" in self.capabilities
         except MailboxProviderError:
             self.close()
             raise
         except Exception:
             self.close()
             raise MailboxProviderError("mailbox_connection_unavailable", non_dispatch=True) from None
+
+    def _authenticated_capabilities(self) -> frozenset[str]:
+        # LOGIN can leave an unsolicited CAPABILITY in this local response
+        # buffer. Bind the observation to the command we issue now.
+        self.conn.untagged_responses.pop("CAPABILITY", None)
+        try:
+            response = self._call("capability")
+        except MailboxProviderError:
+            raise MailboxProviderError("imap_capability_unavailable", non_dispatch=True) from None
+        if not isinstance(response, tuple) or len(response) != 2:
+            raise MailboxProviderError("imap_capability_incomplete", non_dispatch=True)
+        status, data = response
+        if status != "OK":
+            raise MailboxProviderError("imap_capability_unavailable", non_dispatch=True)
+        if (not isinstance(data, list) or len(data) != 1 or not isinstance(data[0], bytes)
+                or not 0 < len(data[0]) <= 65536):
+            raise MailboxProviderError("imap_capability_incomplete", non_dispatch=True)
+        tokens = data[0].split(b" ")
+        # CAPABILITY values are protocol atoms, never quoted strings or MIME.
+        if (len(tokens) > 1024 or any(not token or any(
+                byte < 33 or byte > 126 or byte in b'(){%*"\\]'
+                for byte in token) for token in tokens)):
+            raise MailboxProviderError("imap_capability_incomplete", non_dispatch=True)
+        capabilities = frozenset(token.decode("ascii").upper() for token in tokens)
+        if not {"IMAP4REV1", "IMAP4REV2"}.intersection(capabilities):
+            raise MailboxProviderError("imap_capability_incomplete", non_dispatch=True)
+        return capabilities
 
     def close(self) -> None:
         if self._closed:
