@@ -22,7 +22,8 @@ type TokenPusher = (info: {
   // Firebase REFRESH token (long-lived). Sent alongside the ID token so
   // the engine can refresh the ID token server-side for headless / remote
   // operation (used by the WS `auth.refresh` RPC and the local
-  // `account.set_firebase_token` path). Never persisted to disk.
+  // `account.set_firebase_token` path). Refresh credentials use the
+  // profile persistence contract; short-lived ID tokens stay in memory.
   refreshToken: string
 }) => Promise<void> | void
 
