@@ -249,15 +249,26 @@ def test_sent_exact_id_and_conversation_complete_header_matching():
 
 
 def test_default_factory_uses_existing_password_and_dedicated_locked_clients(monkeypatch):
+    import socket
     from zylch.email import mailboxes
     from zylch.email.imap_client import IMAPClient
     mailbox = SimpleNamespace(id="primary", address=OWNER, is_primary=True,
         imap_host="imap.example.test", imap_port=993, smtp_host="smtp.example.test", smtp_port=587)
     monkeypatch.setenv("EMAIL_PASSWORD", "fixture-only")
     monkeypatch.setattr(mailboxes, "primary", lambda owner: mailbox)
+    class SocketWire(Wire):
+        def __init__(self):
+            super().__init__()
+            self.sock = socket.socket()
+
+        def logout(self):
+            self.sock.close()
+            return "OK", []
+
     def connection(client):
         if client._conn is None:
-            client._conn = Wire()
+            client._conn = SocketWire()
+            client._deadline_connection = client._conn
         return client._conn
     monkeypatch.setattr(IMAPClient, "_ensure_connected", connection)
     first, second = IMAPMailbox(OWNER), IMAPMailbox(OWNER)
@@ -269,10 +280,33 @@ def test_default_factory_uses_existing_password_and_dedicated_locked_clients(mon
         assert len(first.list_drafts()) == 1 and second.list_drafts() == []
         first.close()
         assert first.client._conn is None and second.client._conn is second.conn
+        assert first.conn.sock.fileno() == -1 and second.conn.sock.fileno() >= 0
+        assert not first.client._imap_lock._is_owned() and second.client._imap_lock._is_owned()
+        first.close()
         assert second.list_drafts() == []
     finally:
         first.close()
         second.close()
+
+
+def test_close_disconnects_even_when_deadline_scope_failure_is_surfaced():
+    from contextlib import contextmanager
+    wire = Wire()
+    disconnected = []
+
+    @contextmanager
+    def failed_scope(_deadline):
+        yield
+        raise OSError(9, "Synthetic closed descriptor")
+
+    client = SimpleNamespace(email_addr=OWNER, imap_host="imap.example.test", imap_port=993,
+        _ensure_connected=lambda: wire, disconnect=lambda: disconnected.append(True),
+        provider_deadline=failed_scope)
+    mailbox = IMAPMailbox(OWNER, client=client, mailbox_id="primary")
+    with pytest.raises(MailboxProviderError, match="imap_observation_unavailable"):
+        mailbox.close()
+    mailbox.close()
+    assert disconnected == [True]
 
 
 def test_alternate_token_encoding_cannot_admit_an_alias_of_a_uid():

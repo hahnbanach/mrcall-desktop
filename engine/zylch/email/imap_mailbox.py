@@ -73,15 +73,17 @@ class IMAPMailbox(IMAPProtocol):
             return
         self._closed = True
         try:
-            if self.client is not None:
-                self.client.disconnect()
-        finally:
             if self._scope is not None:
                 scope, self._scope = self._scope, None
                 try:
+                    # The client's final deadline check still uses its socket.
+                    # Complete that scope before logout closes the descriptor.
                     scope.__exit__(None, None, None)
                 except Exception:
                     raise MailboxProviderError("imap_observation_unavailable") from None
+        finally:
+            if self.client is not None:
+                self.client.disconnect()
 
     def __enter__(self):
         return self
