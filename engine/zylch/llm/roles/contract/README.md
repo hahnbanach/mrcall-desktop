@@ -22,6 +22,21 @@ published contract").
 - `engine/scripts/resolve_models.py --apply` writes the build copies
   `engine/zylch/llm/roles/snapshot.json` (always) and `table.json` (only
   when `roles/measured.json` covers every role).
+- `engine/scripts/model_table_refresh.py --data-checkout DIR --preview DIR`
+  reads the complete live sources through the existing resolver reader and
+  writes a private candidate, source payloads, one-file diff and hashed receipt.
+  It holds the existing data-branch lock, requires clean source and data checkouts
+  with the data HEAD matching its actual remote, preserves provider policy and
+  checks the unchanged table against the candidate. Requirements come only from
+  the source checkout's canonical `engine/zylch/llm/roles/requirements.json`;
+  its exact bytes must match the clean source HEAD before reads and publication.
+  The command accepts no alternate requirements path. It never ranks, measures,
+  smokes or invokes a model. After source and data review and compatible consumer
+  deployment, the same command with `--execute --approved-receipt-sha256 HASH`
+  publishes the exact reviewed snapshot through `DataBranch.push`. It rechecks
+  the receipt, source, base HEAD, all tracked data bytes, raw-source hashes,
+  candidate and gates before writing; it does not reread providers on execution.
+  A failed push requires remote-state reconciliation before any further attempt.
 - The daily job (`engine/scripts/model_table_job.py`) publishes on the
   orphan branch `model-table` of `hahnbanach/mrcall-desktop`, under `v1/`:
   `table.json`, `snapshot.json`, `measured.json` and `ledger.json`. It
@@ -43,13 +58,15 @@ published contract").
   `model_table_results.py`, `model_table_outcomes.py`).
 - Run-time URL, engine and billing server alike:
   `https://raw.githubusercontent.com/hahnbanach/mrcall-desktop/model-table/v1/<file>`.
-- The engine downloads `table.json` and `snapshot.json` at start and every
+- The M10 engine on this source line downloads `table.json` and `snapshot.json` at start and every
   24 hours (ETag), applies the gates, caches them in the profile directory,
   and falls back to the last good copy, then to the build copy. The billing
   server loads them daily, keeps the current and the previous snapshot, and
   falls back to the copy taken at image build. `release.yml` refuses a copy
   older than 14 days (its snapshot read more than 14 days ago) or failing
-  the gates (`engine/scripts/model_table_release.py`).
+  the gates (`engine/scripts/model_table_release.py`). This describes this source
+  line, not the installed hosted mailbox engine; current deployment is recorded
+  in the repository's `docs/active-context.md` and HB's mailbox plan.
 
 ## Encoding
 
@@ -127,9 +144,18 @@ those are the snapshot's, so a refresh of prices moves no record.
     one of the parameters), `context_length`, `expiration_date`.
   - `endpoints`: for the models whose endpoints were read (tools, the
     minimum context, no variant, no alias), the admitted ones as `{tag,
-    quantization, pricing}` sorted by tag (a model's pinned endpoint among
-    them whenever it is eligible, whatever its price: below); `null` for the
-    others.
+    quantization, pricing}` with optional `supported_parameters`, sorted by tag
+    (a model's pinned endpoint among them whenever it is eligible, whatever its
+    price: below); `null` for the others.
+    `supported_parameters` is the sorted distinct list from that exact admitted
+    endpoint record. Missing or malformed source lists leave the field absent;
+    an empty list stays empty. No capability is inferred from the global
+    intersection, model-level metadata or another endpoint. The optional field
+    participates in `version`; old snapshots without it remain valid. Consumers
+    must accept this optional property before it is published at the existing
+    version-1 URL, since older schemas reject extra endpoint properties. A pinned
+    formatted request requires exactly one matching admitted endpoint to advertise both
+    `response_format` and `structured_outputs`; missing or ambiguous evidence refuses it.
 - `direct` — keyed by Anthropic's direct id: `{catalogue_id, pricing,
   metadata}` from the endpoint tagged `anthropic` (Anthropic's list price,
   that endpoint's parameters, forced tool choice and context; reasoning and
@@ -180,9 +206,11 @@ K3's cap is its pinned `digitalocean` endpoint's price × the margin, read
 from its `endpoints`, which carry the pin whenever it is eligible (status 0,
 an allowed quantization, tools, no excluded tier), however its price
 compares with the reference price; on a day that endpoint is
-not eligible (degraded, so absent from `endpoints`), K3's cap falls back
+not eligible (degraded, so absent from `endpoints`), an unformatted K3 request's cap falls back
 to its reference price × the margin — K3 stays priced, and a request
-that cannot be routed to its pin fails at the provider as it would today. A direct id is priced from `direct`. A dated direct
+that cannot be routed to its pin fails at the provider as it would today.
+A formatted pinned request instead refuses before admission without exactly one
+capable matching endpoint. A direct id is priced from `direct`. A dated direct
 id `<alias>-YYYYMMDD` is priced and shaped as its alias, and a response
 naming a dated snapshot of the requested alias settles as the alias.
 OpenRouter may fall back between endpoints only within `provider.only`,

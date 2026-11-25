@@ -22,6 +22,9 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 ## Index
 
+- [Mailbox endpoint capabilities](briefs/2026-11-25-mailbox-endpoint-capabilities.md)
+  — [isolated publisher and reader-first data delivery](execution-plans/2026-11-25-mailbox-endpoint-capabilities.md).
+
 - [M10 effective-runtime integration](execution-plans/2026-10-16-m10-current-runtime-integration.md) — [brief](briefs/2026-10-16-m10-current-runtime-integration.md), complete selected-runtime preservation, replacement artifact and deployment prerequisites; [source evidence](evaluations/2026-10-16-m10-current-runtime-preservation.md).
 
 - [Earlier M10 readiness](execution-plans/2026-10-15-m10-memory-production-readiness.md) — historical local source/admission/RPC evidence; its frozen-base preservation and wheel require the effective-runtime successor above.

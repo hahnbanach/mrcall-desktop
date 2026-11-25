@@ -11,6 +11,7 @@ capture, never from the build copy, which the coordinator refreshes.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from decimal import Decimal
 
 import pytest
@@ -254,3 +255,79 @@ def test_prices_are_canonical_decimal_strings():
     }
     assert snapshot.text(Decimal("-0")) == "0" and snapshot.text(Decimal("12.9500")) == "12.95"
     assert snapshot.text(None) is None
+
+
+def test_endpoint_capabilities_come_only_from_the_same_admitted_record():
+    model = entry(supported_parameters=["tools", "structured_outputs", "response_format"])
+    full = ["tools", "structured_outputs", "response_format", "tools"]
+    listed = [
+        endpoint("acme/pin", supported_parameters=full),
+        endpoint("acme/ordinary", supported_parameters=["tools"]),
+        endpoint("acme/down", status=-2, supported_parameters=full),
+        endpoint("acme/fp4", quantization="fp4", supported_parameters=full),
+        endpoint("acme/flex", supported_parameters=full),
+        endpoint("acme/expensive", pricing={"prompt": ".1", "completion": ".2"},
+                 supported_parameters=full),
+    ]
+    rules = candidates.policy(requirements())
+    snap = snapshot.build([model], {model["id"]: listed}, rules, READ_AT)
+    row = snap["models"][model["id"]]
+    assert row["metadata"]["parameters"] == ["tools"]
+    assert row["metadata"]["structured_outputs"] is False
+    assert {e["tag"]: e["supported_parameters"] for e in row["endpoints"]} == {
+        "acme/ordinary": ["tools"], "acme/pin": sorted(set(full)),
+    }
+    assert row["pricing"] == snapshot.pricing(model["pricing"])
+    gates.check_snapshot(snap)
+    reversed_snap = snapshot.build([model], {model["id"]: list(reversed(listed))}, rules, READ_AT)
+    assert reversed_snap == snap
+
+
+@pytest.mark.parametrize("parameters", [None, "tools", ["tools", 1], ["tools", "bad name"]])
+def test_unknown_endpoint_capabilities_are_never_inferred(parameters):
+    raw = endpoint(supported_parameters=parameters)
+    assert "supported_parameters" not in snapshot._endpoint_rows([raw])[0]
+    raw.pop("supported_parameters")
+    assert "supported_parameters" not in snapshot._endpoint_rows([raw])[0]
+    assert snapshot._endpoint_rows([endpoint(supported_parameters=[])])[0]["supported_parameters"] == []
+
+
+def test_same_tag_with_conflicting_records_keeps_each_capability_list_separate():
+    capable = endpoint("acme/pin", supported_parameters=["response_format", "structured_outputs", "tools"])
+    ordinary = endpoint("acme/pin", supported_parameters=["tools"])
+    rows = snapshot._endpoint_rows([capable, ordinary, capable])
+    assert len(rows) == 2
+    assert {tuple(row["supported_parameters"]) for row in rows} == {
+        ("response_format", "structured_outputs", "tools"), ("tools",),
+    }
+    assert rows == snapshot._endpoint_rows([ordinary, capable])
+
+
+def test_capability_changes_bind_the_hash_and_old_snapshots_still_pass(built):
+    old = deepcopy(built)
+    for row in old["models"].values():
+        for e in row["endpoints"] or []:
+            e.pop("supported_parameters", None)
+    old = gates.stamped(old)
+    gates.check_snapshot(old)
+    changed = deepcopy(old)
+    changed["models"][K3]["endpoints"][0]["supported_parameters"] = ["response_format", "structured_outputs"]
+    with pytest.raises(gates.GateError, match="version"):
+        gates.check_snapshot(changed)
+    changed = gates.stamped(changed)
+    gates.check_snapshot(changed)
+    assert changed["version"] != old["version"]
+    for field in ("policy", "direct"):
+        assert changed[field] == old[field]
+    for model, row in built["models"].items():
+        assert old["models"][model]["metadata"] == row["metadata"]
+        assert old["models"][model]["pricing"] == row["pricing"]
+
+
+@pytest.mark.parametrize("parameters", [None, "response_format", [1], [""], ["bad name"],
+                                         ["response_format", "response_format"]])
+def test_snapshot_gate_rejects_malformed_endpoint_capabilities(built, parameters):
+    changed = deepcopy(built)
+    changed["models"][K3]["endpoints"][0]["supported_parameters"] = parameters
+    with pytest.raises(gates.GateError, match="supported_parameters"):
+        gates.check_snapshot(gates.stamped(changed))

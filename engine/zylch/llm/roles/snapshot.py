@@ -32,7 +32,8 @@ explicit choice keeps running whatever the picks are). Per entry:
   `context_length`; `expiration_date`.
 - `endpoints`: for the endpoint pool, the endpoints the provider policy
   admits (`candidates.anchored`: eligible, and priced at or under the
-  reference price × the margin) as `{tag, quantization, pricing}`, sorted
+  reference price × the margin) as `{tag, quantization, pricing}` with optional
+  sorted distinct `supported_parameters` from that exact record, sorted
   by tag and price, exact duplicates once; null for an entry whose
   endpoints were not read.
 
@@ -125,6 +126,12 @@ def _endpoint_rows(endpoints: list[dict]) -> list[dict]:
             "quantization": candidates.quantization(endpoint),
             "pricing": pricing(endpoint.get("pricing")),
         }
+        parameters = endpoint.get("supported_parameters")
+        if isinstance(parameters, list) and all(
+            isinstance(name, str) and name and not any(c.isspace() for c in name)
+            for name in parameters
+        ):
+            row["supported_parameters"] = sorted(set(parameters))
         if row not in rows:
             rows.append(row)
 

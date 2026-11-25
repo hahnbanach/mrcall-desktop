@@ -258,6 +258,10 @@
         },
         "pricing": {
           "$ref": "#/$defs/endpoint_pricing"
+        },
+        "supported_parameters": {
+          "description": "Sorted distinct supported_parameters from this exact admitted endpoint record; absent when the provider did not publish a list. No capability is inferred from model-wide metadata or another endpoint.",
+          "$ref": "#/$defs/names"
         }
       }
     },
