@@ -113,7 +113,35 @@ The revised source packet is
 the actual review is
 `/tmp/mrcall-ai-kit/gateway-publisher-joined-m1-review-20261125/revision-2/`.
 
-The source remains isolated from the hosted engine line. Scoped documentation
-review, source commit, free live preview, compatible gateway deployment, separate
-data review and actual publication remain pending. Source checks make zero live
-provider calls and establish no inference, debit or installed product acceptance.
+Source `d79e2cf6` is committed and published only on its isolated feature branch.
+The complete free live preview contains 472 catalog models and 228 endpoint
+responses. Independent rebuild reproduces its bytes, matches all 577 admitted
+endpoint rows and verifies the five configured model prices. Both reader gates
+and the unchanged table pass. The exact reviewed publication command runs once
+through the completion checker's actual focused action and exits 0.
+
+Actual data commit `b7e2d960ba953ad6f6848b49b04236c48ff8fda7` has parent
+`3e1273597ae74fe10c7e121c8a73996204113c9d` and changes only `v1/snapshot.json`.
+All five other blobs remain byte-identical. Independent branch/ref downloads
+verify the full snapshot and table bytes. The published snapshot version is
+`ceba39dabf9c394c561a10eb96faf57402fa3e81d34588766dac98eb1498cabc`, raw SHA-256
+`ac4255a78b91cf69fa98b5136f7141d552b6c9ef4a92da87dcdc52e253e761bf`.
+
+Both gateway realms pass their normal pipelines at `2bf3a56b` before publication,
+with exact 78-file source/schema and image checks. After supported same-image
+rolling restarts, each passes twelve authenticated after-pin quote checks on
+the published version: eight valid and four malformed-format refusals. Actual
+pin, prices, quantizations and wire bindings match the reviewed snapshot.
+These probes perform no inference, execute or debit.
+
+Actual evidence is under
+`/home/mal/.local/share/mrcall-operational-evidence/2026-11-24/mailbox-model-data-free-refresh-20261125/`;
+postpublication review is
+`/tmp/mrcall-ai-kit/mailbox-model-data-publication-review-20261125/postpublication/`;
+both runtime/quote packets are under
+`/tmp/mrcall-ai-kit/gateway-structured-output-release-preparation-20261125/`.
+All seven hosted engines are verified on dev14 from `74f15a13`. Final component
+documentation closure, the active corrected ordinary support result, public
+kernel/installer provenance, literal Gmail web and parent final review remain
+open. The completed parent installed checks retain their own evidence.
+No broader M10 or paid billing acceptance is claimed.

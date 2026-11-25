@@ -17,8 +17,8 @@ in active-context-archive.md.
 This branch extends the existing model-table publisher from `652c0007` for the
 [mailbox endpoint-capability dependency](execution-plans/2026-11-25-mailbox-endpoint-capabilities.md).
 It is neither an installed engine nor a replacement for the hosted mailbox line.
-All seven actual engines remain on dev13 `2e27f02e`; their separate immutable
-source-reviewed dev14 artifact is inactive. Both normal operators retain local
+All seven actual engines run immutable dev14 from `74f15a13`, independently
+verified after the release-only switch. Both normal operators retain local
 kernel v0.76.1 and paused schedules. HB's November 23 plan owns installed release
 and acceptance. The October base snapshot is retained verbatim as history.
 
@@ -32,31 +32,37 @@ requirements path refuses before provider reads or data changes.
 
 The ordinary model-resolution workflow can spend and is outside this update.
 The new refresh previews first and publishes only a separately reviewed snapshot.
-No live provider read, model inference, data publication or service switch is
-established by the source checks. [Published contract](../engine/zylch/llm/roles/contract/README.md).
+The exact source commit is `d79e2cf6`. A complete free live read covers 472
+catalog models and 228 endpoint responses. Independent review matches all 577
+admitted rows and preserves the five configured model prices. Data commit
+`b7e2d960` changes only snapshot.json; the five other blobs remain exact.
+Both immutable-ref and branch downloads match the reviewed snapshot and table.
+Both deployed gateway realms run compatible `2bf3a56b`, with 78 matching files,
+healthy HTTP 200 and twelve passing authenticated after-pin checks per realm.
+Their serving snapshot is `ceba39da…`. Publication and quotes invoke no model
+inference or credit debit. [Published contract](../engine/zylch/llm/roles/contract/README.md).
 
 ## Unresolved
 
-- Scoped documentation criticism and separate data/release review remain open.
-  Live complete catalog/endpoint reads, unchanged-table gates and currently
-  selected model compatibility must pass before publishing any candidate.
-- Both actual gateway realms still use old readers. Compatible source must
-  deploy main → dev → production with exact images/source and authenticated free
-  quotes before publishing the optional field. Old endpoint schemas reject it.
-- After exact snapshot publication, the serving gateway must expose its frozen
-  version and admit the authenticated pinned format. These quotes establish no
-  paid inference or actual credit settlement. Existing uncertain records remain.
-- Desktop dev14 activation, the ordinary support reply, public kernel provenance,
+- Final scoped documentation and component closure remain open. The actual
+  source/data/reader gates have their retained independent approval and execution
+  evidence. These results establish no paid inference or credit settlement.
+  Existing uncertain records remain fenced.
+- The active gateway keeps its image-build snapshot as a fallback. Its actual
+  authenticated quotes, rather than that build file, prove the serving version.
+  Old readers must not be reinstated against incompatible data without the
+  reviewed recovery procedure.
+- The ordinary support reply, public kernel provenance,
   Gmail client interaction and the parent delivery's other installed obligations
   remain separate and open. Historical M10 and unrelated runtime work stay under
   their existing plans; this publisher branch does not certify their deployment.
 
 ## Next
 
-1. Reconcile and review these scoped documents, then commit the reviewed task
-   paths and obtain a clean source checkout for the free-only preview.
-2. Read the complete current catalog and endpoints, validate unchanged policy,
-   exact table bytes and both consumer gates, then review the concrete data diff.
-3. Verify deployed compatible gateway readers and publish only that reviewed
-   snapshot. Verify actual remote bytes and authenticated pinned quotes before
-   returning activation and ordinary acceptance to the hosted mailbox delivery.
+1. Finish documentation and component closure from the actual publication,
+   public bytes, deployed readers and authenticated quote receipts.
+2. Preserve the verified hosted dev14 activation and return the remaining
+   ordinary support, public kernel, Gmail client and final-review obligations
+   to the parent mailbox delivery.
+3. Keep future refreshes free-only unless their separate paid workflow is
+   explicitly invoked under its existing spending policy.
