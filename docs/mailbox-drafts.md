@@ -75,9 +75,19 @@ ambiguous source identity refuses before generation.
 
 ## Reply generation and recovery
 
-Reply generation requests the provider's strict JSON-schema format for one
-closed reply decision: plain-text draft or internal needs-review outcome.
-The full schema is included in bounded pricing and provider capability checks.
+Reply generation requests one closed strict JSON-schema object with exactly
+four required fields: `decision`, `body`, `reason` and `missing_facts`.
+`decision` selects `draft` or `needs_review`. A draft requires a nonblank plain-
+text body of at most 65,536 UTF-8 bytes and an empty facts array. Its internal
+explanation may be empty or nonblank within 4,096 UTF-8 bytes. Only the body
+reaches the mailbox writer; the auxiliary explanation is discarded. Review
+requires the literal empty body and retains the existing private review result.
+Duplicate or extra fields, invalid Unicode, contradictory values, incomplete
+output, tools and refusal fail before mailbox effects. The
+[private decision brief](briefs/2026-11-25-flat-reply-decisions.md) and
+[verification plan](execution-plans/2026-11-25-flat-reply-decisions.md) own the
+candidate's scoped evidence. The full schema is included in bounded pricing and
+provider capability checks.
 The existing provider selection remains authoritative. MrCall bounded quotes
 refuse missing format capability before inference. Personal-provider paths send
 the strict format to the selected provider, which can refuse it remotely;
@@ -221,9 +231,20 @@ Synthetic provider-wire, public MCP/RPC, task/approval, subprocess-restart,
 migration and Chromium UI checks exercise the source. Installed evidence covers
 a saved Gmail IMAP edit, MCP send and lookup of the same send after an actual
 Café service restart with the original key and an alias accepted through RPC.
-Packaged Linux Desktop restores authentication after restart and opens the
-exact draft produced by the first ordinary Café tick. The
-[Desktop delivery plan](execution-plans/2026-11-23-mailbox-drafts.md) records
-the completed ordinary launcher outcomes and their version scopes, pending
-Café personal-K3 positive preparation, both normal-clone FULL checks, public
-release provenance, Gmail web verification and final review.
+Packaged Linux Desktop restores authentication after restart and has historical
+opening proof for the first ordinary Café draft. That old object is now absent;
+its earlier observations retain their time/version scope. The two normal public
+kernel installations and their scoped FULL judgment pass. Installed dev16
+prepares a controlled personal-K3 draft with an approved body. Its later absent
+handle recovers the original operation without recreation. A distinct explicit
+RPC fixture supplies current Desktop opening and Gmail/MCP tests. Current
+ordinary direct-send proof has one Sent, zero drafts and stable same-key
+accounting; its recipient is unobserved and the earlier controlled recipient
+proof remains separately scoped. Gmail C external-send/no-recreation passes.
+Gmail A/B, publication and final review retain their actual dispositions in the
+[Desktop delivery plan](execution-plans/2026-11-23-mailbox-drafts.md).
+The governing HB plan separates component publication from mandatory parent
+Gmail verification. A historical sent message moved to Trash does not authorize
+a second transmission: current recovery can report `unconfirmed` while retaining
+the original completed receipt and message identity. Such a current observation
+is distinct from the earlier confirmed Sent proof.

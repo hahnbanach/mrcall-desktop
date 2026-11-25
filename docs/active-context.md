@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: f937091a1ab3834f17e60479d567e68b3b0ca49e
-doc_baseline_date: 2026-11-22
+doc_baseline_commit: 626d303db35c41f9b189da3197a5c1476185bf4a
+doc_baseline_date: 2026-11-25
 ---
 
 # Active Context — Cross-cutting
@@ -19,10 +19,10 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-All seven hosted engines run the immutable dev15 release from source
-`96f02460`. Actual process identities, arguments, listeners and all 492
-package files match. Both normal operator clones use the exact local
-`v0.76.1` artifact. Café Production is the routed operator MCP profile.
+All seven hosted engines run immutable dev16 from source `626d303d`.
+Actual process identities, arguments, listeners and all 492 package files match.
+Both normal operator clones install the actual public HTTPS `v0.76.1` tag;
+164 files, complete retained dependencies and public provenance match. Café Production is the routed operator MCP profile.
 
 The [mailbox implementation](mailbox-drafts.md) uses existing primary IMAP/SMTP
 app passwords. The engine owns the current mailbox draft, SMTP transmission and
@@ -33,16 +33,20 @@ source headers are normalized; ambiguous sources remain held. The
 compatible recovery without restoring discarded internal text. All seven actual
 databases have completed internal draft retirement with zero provider mutations.
 
-Packaged Linux Desktop 0.1.57 restores hosted identity with refresh-only
-Firebase persistence and opens the exact first Café tick's native draft
-(UID 2515) on dev15. The first ordinary tick passes on dev12 and kernel
-`v0.76.1` with one exact selection, one draft and zero replies. Closed-home
-scans find no persisted ID token. Independent
-Gmail IMAP edits and MCP sending have one matching Sent and received message.
-The original key and an accepted RPC alias recover that delivery after real
-restart, with zero remaining drafts. The signed Apple Silicon 0.1.57 candidate
-is unnotarized after Apple's agreement-related refusal. The
-[delivery plan](execution-plans/2026-11-23-mailbox-drafts.md) records the evidence.
+Packaged Linux Desktop 0.1.57 retains hosted sign-in and full-restart proof.
+Dev16's original model preparation has an approved 197-byte Italian body with
+reference and total 254. Its old native handle is now absent. Read-only recovery
+retains the same operation, reservation and body hash without recreation, with
+changed instruction metadata. A distinct explicit RPC fixture creates one
+threaded draft with that controlled text, zero inference and zero SMTP. Current
+packaged Desktop opens its exact handle; lead visual review and the closed-home
+ID-token scan pass. Earlier same-object MCP/Desktop proof retains its time scope.
+Gmail external send C passes independent Sent/recipient and old-handle refusal.
+The old canonical send retains historical Sent/received proof and current exact
+recoverable Trash; its original identity is preserved. Source16 ARM64 CI and
+complete artifact checks pass with signing and the qualified Apple agreement
+refusal. Public installer v0.1.57 is not yet published. The
+[delivery plan](execution-plans/2026-11-23-mailbox-drafts.md) binds distinct cases.
 
 The original 17-target order has zero remaining targets in Drafts at its first
 new-route execution; the unrelated later draft is preserved. Exact read-only
@@ -88,11 +92,13 @@ The old failed support generation stays fenced.
 
 ## Unresolved
 
-- Both-clone FULL awaits the canonical Café personal-K3 preparation and final
-  independent judgment. Cumulative live-read,
-  independent provider oracle, fixed-template safety and paused-launcher checks
-  have qualified evidence. Gmail web, public installer/kernel provenance and
-  separate final review remain open.
+- Scoped kernel FULL and both public installations pass. Current ordinary dev16
+  formatter proof has one Sent, zero drafts, semantic approval and same-key
+  accounting. Its uncontrolled recipient remains unobserved; dev14's separate
+  controlled recipient proof remains historical. The extra controlled 518 case
+  fails and stays separate. Gmail A saved-edit/MCP-send and B unflagged Trash,
+  public Desktop release and separate final review remain open. Parent delivery
+  stays active.
 - Native automatic bootstrap, broad RPC parity, customer reply quality and full
   Desktop packaging retain the parent operator obligations. Historical MCP helper
   pairing does not establish wider kernel CLI or installed FULL acceptance.
@@ -106,12 +112,10 @@ The old failed support generation stays fenced.
 
 ## Next
 
-1. Complete the canonical Café personal-K3 preparation and replay on dev15.
-   Ordinary support delivery and post-upgrade MCP original/alias recovery and
-   packaged Linux draft opening pass. Preserve both Café examinations and
-   exact restored scheduling state.
-2. Complete both-clone FULL and Gmail web acceptance. Preserve the completed
-   original-17 conditional result with its three unlocated identities.
-3. Complete documentation review, separate final installed review and public
-   provenance under the governing HB plan. Verify the seven engines after
-   the actual service checkout follows Desktop main.
+1. Complete Gmail A on the distinct current fixture and B on the Gmail-authored
+   draft. Preserve the absent original operation and its financial identities.
+2. Retain C, the original-17 result, ordinary tick scopes and current Desktop
+   opening. Preserve recurring pauses, restored cron and uncertain sends.
+3. Complete documentation criticism, separate final component review and public
+   release. Pull the actual service checkout immediately after Desktop main
+   advances and verify all seven runtime bindings again.

@@ -609,6 +609,7 @@ After mailbox-draft retirement, never overwrite the current profile database
 with that pre-migration backup. Follow the
 [mailbox migration contract](mailbox-draft-migration.md#compatible-rollback):
 preserve canonical send receipts, request aliases, uncertain generation IDs,
-reservations and usage. Retain a compatible dev14 or forward reader and writer.
+reservations and usage. Retain dev15 or a verified forward reader and writer
+that supports the current policy-only review state.
 Discarded drafts stay discarded and uncertain inference or sending is not
 repeated.

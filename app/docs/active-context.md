@@ -25,9 +25,18 @@ sign-in, authenticated hosted identity and full process restart pass on the test
 Linux desktop. Its root-owned packaged bundle has seven compiled files identical
 to the production build and a hashed 73-file runtime inventory. Closed-profile disk scans find neither actual ID token. Password,
 Google-credential and restart cases also pass through the official SDK in Chromium.
-The same installed Linux app opens the first ordinary Café tick's exact draft
-(IMAP UID 2515) on dev15. Its closed-profile scan finds no persisted ID token.
-The retained dev14 Apple Silicon artifact has verified ZIP and DMG digests, full CRC and runner signing evidence. Its notarization is refused for the Apple agreement. The source-matching dev15 ARM64 dispatch succeeds. Its complete ZIP hash and CRC and the 249,567,884-byte DMG hash are verified; runner signing passes and Apple refuses notarization for the account agreement.
+The installed Linux app has historical dev15 opening proof for Café UID 2515,
+which is now absent. Its closed-profile scan finds no persisted ID token. Current
+Desktop opens the distinct explicit RPC-created fixture with the known
+197-byte controlled body. The lead compares its full screenshot against the
+body, reference, total 254 and signature. The closed-home token scan passes.
+The original MCP-generated handle is absent and is never adopted by the new
+fixture; read-only recovery retains the original operation without recreation.
+The source-matching dev16 ARM64 dispatch succeeds. Its complete installer and
+consumed-sidecar ZIP digests, CRC and DMG hash are verified. Runner signing
+passes; Apple refuses notarization for the account agreement under the
+workflow's explicit fallback. This is preparation evidence; the ordinary public
+tag workflow and its exact public asset still require verification.
 
 Settings separates payment provider, model selection, daily allowance and bounded
 preparation controls. Saved keys belong to the active engine. Pending choices
@@ -42,12 +51,13 @@ artifact, hosted deployment and model state live in the
 
 ## Unresolved
 
-- The corrected ordinary support send and both Café examinations pass.
-  Post-upgrade public MCP recovery and packaged Linux opening preserve their
-  original objects. Canonical personal-K3 verification, both-clone FULL and
-  literal Gmail web remain with the governing HB plan. Recurring pauses and
-  cron are restored. Public release, Mac execution and independent validation of the signed,
-  unnotarized DMG remain open.
+- Historical ordinary support and both Café examinations retain their scopes.
+  Current dev16 ordinary formatter proof and current Desktop opening pass with
+  their stated limits. Gmail C external send and no-recreation pass. Gmail A
+  saved edits/MCP send and B unflagged Trash remain open. Public Desktop release,
+  Mac execution and independent signature validation remain unverified.
+  Three older controlled messages retain exact recoverable Trash proof; their
+  historical Sent observations remain separate.
 - Fresh-device Mac sign-in, personal-key entry, live PEC and the packaged Qonto
   provider comparison retain their existing acceptance owners.
 - Reopen Settings after a connection change to reload its catalog. Reloading

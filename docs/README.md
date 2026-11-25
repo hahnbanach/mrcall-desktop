@@ -24,6 +24,10 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 - [Mailbox draft contract](mailbox-drafts.md) — shared engine operations, exact IMAP identity, SMTP sending and replay. The [brief](briefs/2026-11-23-mailbox-drafts.md) defines acceptance. The [mailbox delivery plan](execution-plans/2026-11-23-mailbox-drafts.md) records installed evidence and remaining acceptance. [Legacy retirement](mailbox-draft-migration.md) covers migration and rollback.
 
+- [Flat private reply decisions](briefs/2026-11-25-flat-reply-decisions.md) and
+  [installed verification](execution-plans/2026-11-25-flat-reply-decisions.md)
+  — one strict private representation for mailbox drafts and direct sends.
+
 - [Assignment reads in a multi-mailbox profile](briefs/2026-11-22-assignment-mailbox-scope.md) and their [delivery plan](execution-plans/2026-11-22-assignment-mailbox-scope.md).
 - [Stripe test installer](execution-plans/2026-10-16-stripe-test-installer.md) — isolated test candidate, source checks and unverified installed acceptance; [brief](briefs/2026-10-16-stripe-test-installer.md).
 - [Stripe startup recovery](execution-plans/2026-10-16-stripe-startup-recovery.md) — bounded Settings startup, session recovery and replacement test installer; [brief](briefs/2026-10-16-stripe-startup-recovery.md).

@@ -9,9 +9,9 @@ are preserved verbatim in [active-context-archive.md](active-context-archive.md)
 ## State now
 
 The [mailbox draft implementation](../../docs/mailbox-drafts.md) is installed as
-`0.1.57.dev15+mailboximap20261125.mrcall` on all seven hosted engines. All 492
+`0.1.57.dev16+mailboximap20261125.mrcall` on all seven hosted engines. All 492
 package files, actual process UID/cwd/arguments and expected listeners match the
-immutable source `96f02460` release. Primary IMAP and raw SMTP use existing app
+immutable source `626d303d` release. Primary IMAP and raw SMTP use existing app
 passwords; Firebase identity and Calendar OAuth remain separate. The new MCP
 lists the current mailbox and exposes explicit recoverable Trash and keyed send.
 
@@ -22,15 +22,22 @@ The migration publishes, deletes and sends zero provider messages. Both repeated
 migration and exact writer/schedule fences pass. Saved models, daily limits,
 profile configuration and parked voice are preserved.
 
-The dev15 focused aggregate passes 461 checks on unchanged product bytes. Installed
+The dev16 installed aggregate passes 542 checks on unchanged product bytes. Historical
 MCP sending reads saved Gmail IMAP recipients and body. The original key and an
 accepted native RPC alias recover the same canonical operation and Message-ID
 after an actual Café service restart. Independent provider counts are one Sent,
 one received and zero drafts. A new, unbound MCP key on the retired handle
 refuses before binding. Strict singleton full-MIME source headers are normalized.
-Both normal clones use immutable local kernel `v0.76.1`. The first ordinary
+Both normal clones install the actual public HTTPS kernel `v0.76.1`. The first ordinary
 Café tick on dev12 prepares one draft with zero replies. Packaged Linux Desktop
-opens that exact draft on dev15. See the
+has opening proof for that draft on dev15; the old object is now absent. A new
+controlled dev16 preparation has an approved 197-byte body; its old handle is
+absent. Recovery retains its operation, reservation and body without recreation.
+A distinct explicit RPC-created fixture has one create and zero model/SMTP
+submissions; current packaged Desktop opens it with visual and token-scan proof.
+The current ordinary formatter proof has one Sent, zero drafts, semantic approval
+and stable same-key costs. Its recipient remains unobserved; the controlled
+dev14 recipient proof retains its earlier scope. See the
 [leaf plan](../../docs/execution-plans/2026-11-23-mailbox-drafts.md) for exact
 evidence and remaining acceptance.
 
@@ -86,11 +93,12 @@ result to its observed version.
 
 ## Unresolved
 
-- Both-clone FULL awaits canonical Café personal-K3 generation and final
-  judgment; cumulative read equivalence,
-  provider oracle, fixed-template safety and paused launchers have evidence.
-  Public provenance and literal Gmail web remain open. The original-17 order
-  remains complete with zero moves, fourteen originals in recoverable Trash
+- Kernel FULL and both public-tag installations pass. Gmail C external send and
+  no-recreation pass. Gmail A saved-edit/send and B unflagged Trash, public
+  installer and final review remain open. The extra controlled dev16 518 case
+  fails; the separately verified ordinary reply does not change that outcome.
+  Three older controlled messages retain exact recoverable Trash proof with
+  unknown cause. The original-17 result remains zero moves, fourteen located
   and three unlocated.
 - Main's broad test tree and RPC contract checks have recorded pre-existing
   failures, including Qonto finance rules that no hosted unit runs. Candidate
@@ -118,10 +126,9 @@ result to its observed version.
 
 ## Next
 
-1. Complete canonical Café personal-K3 preparation and replay on dev15.
-   Ordinary support and post-upgrade MCP/Desktop checks pass. Preserve exact
-   restored cron and pauses, existing drafts and every uncertain operation.
-2. Complete the cumulative checks for both-clone FULL, Gmail web evidence,
+1. Complete Gmail A/B on their exact current fixtures. Preserve absent original
+   operations, restored cron and pauses, and every uncertain send identity.
+2. Complete Gmail client evidence, current Desktop release provenance,
    documentation and separate final review. Verify public provenance and all
    seven process identities after the published Desktop main reaches the
    actual service checkout.

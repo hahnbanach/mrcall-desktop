@@ -53,14 +53,15 @@ They do not transfer provider coverage implicitly.
   `/tmp/mrcall-ai-kit/mailbox-migration-review/report.md`.
 - [x] Kernel source integration is APPROVED; the complete frozen suite exits zero.
   The M2 report is `/tmp/mrcall-ai-kit/mailbox-kernel-integration-review/report.md`.
-- [ ] Both installed-clone FULL checks under the governing plan.
+- [x] Both installed-clone FULL checks, separate kernel final approval and
+  adoption of the actual public HTTPS `v0.76.1` tag under the component boundary.
 - [ ] Documentation critic and separate final review through final-user paths.
 - [x] Existing primary IMAP/SMTP admission and seven-engine cutover.
 - [x] Actual saved Gmail IMAP edit, keyed MCP send, receipt replay after engine
   restart, and independently matching Sent/received message.
 - [x] Installed Linux Desktop 0.1.57 default authentication and full restart.
 - [x] Durable binding and status recovery for a second key on the same canonical
-  send. Dev15 is installed on all seven engines; the recorded alias proof uses dev13. Authenticated RPC accepts the
+  send. Dev16 is installed on all seven engines; the recorded alias proof uses dev13. Authenticated RPC accepts the
   alias and actual post-restart RPC status and MCP recovery retain the original
   operation and Message-ID.
 - [x] First ordinary Café draft-mode tick and installed Linux Desktop opening
@@ -79,10 +80,27 @@ They do not transfer provider coverage implicitly.
 The primary mailbox already supplies IMAP/SMTP credentials. Gmail OAuth consent
 is not a dependency. Current source removes the unreleased Gmail OAuth surface.
 The original API candidate and its 403 evidence remain historical artifacts.
-All seven hosted engines run immutable dev15 from `96f02460`. Both normal clones use the exact
-local `v0.76.1` package at commit
-`6b5fa007c8c0fa98c0d5f5a05a76052eea3f3d0f`. Their FULL acceptance and public
-provenance remain required.
+All seven hosted engines run immutable dev16 from `626d303d`. Both normal clones
+install the actual public HTTPS `v0.76.1` tag at commit
+`6b5fa007c8c0fa98c0d5f5a05a76052eea3f3d0f`. Their scoped FULL acceptance,
+separate kernel final approval and public installation provenance pass.
+
+Dev16's original controlled model preparation has an approved 197-byte body
+and total 254. Its later old-handle absence and read-only same-operation recovery
+are retained; no positive present-draft replay is claimed. The approved HB
+November 25 fixture amendment permits a distinct explicit RPC-created fixture
+for current Desktop and Gmail/MCP tests. It creates one draft with zero inference
+or SMTP and preserves old rows. Current packaged Desktop opens that exact
+fixture; lead full-body visual review and closed-home token scan pass.
+
+Current dev16 ordinary direct-send proof has one Sent, zero drafts, approved
+semantics and stable same-key accounting, with no controlled recipient readback.
+The separate dev14 controlled recipient proof retains its version scope. The
+extra controlled 518 test remains unsuccessful. Gmail C external-send and
+old-handle refusal pass. Gmail A saved-edit/MCP-send, B unflagged Trash, public
+Desktop release and final review remain open. The public installer is v0.1.56.
+The governing HB takeover plan owns the combined evidence scope. This parent
+plan remains active until its required installed acceptance and final review.
 
 Recurring schedules remain paused outside bounded acceptance windows. The
 corrected ordinary MrCall run completes with exact cron and both pause files
@@ -92,7 +110,7 @@ fresh state digest and read-only exact Sent proof; it restores no discarded
 draft and retransmits no uncertain operation.
 
 
-## Installed dev15 checkpoint — 2026-11-25 05:49 UTC
+## Installed dev15 checkpoint — 2026-11-25 05:49 UTC — historical
 
 All seven hosted engines run immutable `0.1.57.dev15+mailboximap20261125.mrcall`
 from `96f02460bab9f0c9909ed663ae07cfa5c8a075dd`. Their 492 product files match
