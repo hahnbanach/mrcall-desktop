@@ -1,11 +1,19 @@
 ---
-status: active
+status: completed
 created: 2026-11-25
 brief: ../briefs/2026-11-25-flat-reply-decisions.md
 owners: [desktop-engine, release-operator, integration-lead]
 ---
 
 # Flat reply decisions in the installed Desktop engine
+
+The formatter is implemented, installed as dev16 on all seven hosted engines and
+published in Desktop `v0.1.57`. The current verification boundary below records
+the approved outcomes and their qualifications. Component source/build/switch,
+qualified final review and public publication are complete. The primary mailbox
+plan owns the remaining global final verdict. Retained milestone procedures
+preserve their proposed ordering and requirements verbatim; their starting fleet
+is historical.
 
 This is a substantial change to paid generation on both the mailbox draft and direct-send paths. The [approved brief](../briefs/2026-11-25-flat-reply-decisions.md) has SHA-256 `b990e4930fb4ebb85585893fd96c3093d4b612306d1c5ef7686bf31f0596991c`. Its framing verdict and approved copy are in `/tmp/mrcall-ai-kit/flat-reply-candidate-brief-review-20261125/`. A fresh plan reviewer must approve the exact brief and plan before M1 starts. Each dependent milestone uses its predecessor's actual reviewed output. Retain approved copies, hashes, adverse results and any qualifications.
 
@@ -48,13 +56,55 @@ Before M4 or M6 uses a new baseline, separately review the exact absence witness
 
 The governing HB November 25 takeover plan and approved fixture amendment bind
 the actual outcomes: positive model preparation, later old-handle absence and
-same-operation read-only recovery, distinct free RPC fixture, current Desktop
-opening, ordinary formatter proof and literal Gmail acceptance. The extra
-controlled dev16 send case remains unsuccessful. The original controlled dev14
-transport/recipient result retains its own scope. The procedures below retain
-their earlier proposed ordering; they do not authorize recreating the absent
-original or reporting a positive present-draft replay. Parent status stays active
-while Gmail A/B, public publication or final review is missing.
+same-operation read-only recovery, distinct free RPC fixture, current packaged
+Desktop opening and ordinary dev16 formatter proof. The ordinary dev16 recipient
+remains unobserved; the original controlled dev14 transport/recipient result
+retains its version scope. The extra controlled dev16 518 case stays unsuccessful.
+
+Gmail A has one actual MCP send and original-key replay, one Sent, one received
+and zero drafts with all 223 saved body bytes preserved. Independent review
+approves composed verification: Gmail recipient/body ingestion precedes an
+explicit engine correction of the sole controlled recipient; current native MIME
+then supplies MCP send without a client-origin branch. Literal uninterrupted
+Gmail-recipient-edit-to-SMTP remains unestablished, and browser actions remain
+operator-reported. The approved framing report is
+`/tmp/mrcall-ai-kit/composed-recipient-framing-review-20261125/report.md`, SHA-256
+`b2d3f61b15139717adada933a14410a930f843ea09923f67eeb1c220c3d01daf`.
+B has one exact unflagged draft in recoverable Trash with zero outgoing mail.
+C has one external Sent/received message, zero drafts and typed old-handle refusal
+with no new rows or recreation. Older operations and accounting remain preserved.
+
+Both normal clones use actual public kernel `v0.76.1`. All seven engines retain
+immutable dev16 product source `626d303d`. Published immutable Desktop `v0.1.57`
+binds release source `50ee8316`; its publication service pull verifies that head
+with all seven process identities unchanged. Later documentation-only main
+descendants are tracked by actual pull receipts. Public tag workflow `45617312164`, attempt 1,
+succeeds in all four jobs. Exact consumed sidecar, complete ZIP digest/CRC and
+anonymous 249,599,199-byte public ARM64 DMG size/hash pass. Runner signing passes;
+Apple agreement HTTP 403 leaves the package unnotarized. Native Mac execution
+and independent Mac signature validation remain unverified. The terminal public
+receipt is `desktop-publication-dev16-r4-final-20261125/public-verification.json`
+under the November 24 private evidence root, SHA-256
+`841aa0c7349a98dff5542f854c09434ed268f0cdbed7fae9546fc089d8558061`.
+The qualified component final review is APPROVED in
+`/tmp/mrcall-ai-kit/mailbox-component-takeover-20261125/component-final-release/report.md`.
+Its immutable retained copy is
+`desktop-publication-dev16-r4-final-20261125/component-final-review.md` under the
+same evidence root, SHA-256
+`31284212c033fd44094473e88a87a04840e07be12b21aa1d3de78d3035034ce3`.
+The exact clean-commit publication approval is
+`desktop-publication-dev16-r4-final-20261125/publication-approval-50ee8316.json`,
+SHA-256 `64b04f6cc2ca34e0de61acbf1b0bca501b52006233c023191a31d009a072a1e7`.
+That frozen component review excludes later Gmail A/B; their separate approved
+composed-verification framing and actual terminal results remain bound above.
+
+The [parent mailbox plan](2026-11-23-mailbox-drafts.md) binds the exact A/B/C and
+public artifact hashes. Its original-17 result remains zero moves, fourteen in
+recoverable Trash and three unlocated with unknown cause. Cron, pauses, budgets
+and old send fences remain preserved. The retained procedures do not authorize
+recreating absent originals or claiming positive present-draft replay. This plan
+is complete within its reviewed component boundary. The primary November 23
+mailbox plan retains global documentation closure and final-review state.
 
 ## M4. Renew the exact Café original and prove public preparation
 
@@ -84,8 +134,19 @@ Rebind the existing Desktop release transaction to dev16, the exact reviewed fea
 
 ## What this plan establishes
 
-The proposed sequence can demonstrate the private formatter in both production caller modes for specific controlled sources, preserved public recovery and charging, seven installed packages and a verifiable public artifact.
+The reviewed source and installed checks establish the flat formatter on both
+caller paths, seven immutable dev16 installations, preserved recovery/accounting
+and the verified public Desktop `v0.1.57` artifact. Actual model preparation,
+ordinary direct-send formatter evidence, packaged Linux opening and Gmail A/B/C
+retain the distinct source, fixture, recipient and composed-verification limits
+recorded above. The qualified component final review and subsequent exact publication proof
+complete this component; the primary mailbox plan owns the global final verdict.
 
 ## What remains unestablished
 
-The original flat diagnostic remains terminal `invalid` / `unusable_output` because its decoder required an empty draft reason. Its settled flat call and the incomplete nested attempt retain their original financial identities. No nested provider outcome establishes causality or superiority. This plan supplies no new installed, provider, release or Gmail result.
+The original flat diagnostic remains terminal `invalid` / `unusable_output` because its decoder required an empty draft reason. Its settled flat call and the incomplete nested attempt retain their original financial identities. No nested provider outcome establishes causality or superiority. Current installed,
+provider, publication and Gmail results are established only within the qualified
+boundaries above. Literal uninterrupted Gmail-recipient-edit-to-SMTP, controlled
+ordinary dev16 recipient readback, native Mac execution and independent Mac
+signature validation remain unestablished. The primary mailbox plan owns the separate global final verdict and applicable
+documentation closure; component completion does not broaden those claims.

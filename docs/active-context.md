@@ -1,5 +1,5 @@
 ---
-doc_baseline_commit: 626d303db35c41f9b189da3197a5c1476185bf4a
+doc_baseline_commit: 50ee8316e1d9b793e2bbbc9a7520ef088c1f6b10
 doc_baseline_date: 2026-11-25
 ---
 
@@ -41,12 +41,25 @@ changed instruction metadata. A distinct explicit RPC fixture creates one
 threaded draft with that controlled text, zero inference and zero SMTP. Current
 packaged Desktop opens its exact handle; lead visual review and the closed-home
 ID-token scan pass. Earlier same-object MCP/Desktop proof retains its time scope.
-Gmail external send C passes independent Sent/recipient and old-handle refusal.
-The old canonical send retains historical Sent/received proof and current exact
-recoverable Trash; its original identity is preserved. Source16 ARM64 CI and
-complete artifact checks pass with signing and the qualified Apple agreement
-refusal. Public installer v0.1.57 is not yet published. The
-[delivery plan](execution-plans/2026-11-23-mailbox-drafts.md) binds distinct cases.
+Gmail A has one MCP send, original-key replay, one Sent/received, zero drafts
+and the exact 223-byte saved body. Its operator-reported Gmail body edit is
+independently read; the engine corrects the sole test recipient with one update.
+An independent review approves composed recipient verification through the common
+native MIME reader; the uninterrupted Gmail-recipient-edit-to-SMTP case remains
+unestablished. The delivery plan retains the approved report and qualification.
+B has one exact unflagged draft in recoverable Trash and zero Sent/received.
+C external send has one Sent/received, zero drafts and typed old-handle refusal
+without recreation. Browser actions remain operator-reported.
+All cases preserve old rows and generation/accounting. The old canonical send
+retains historical delivery and current exact recoverable Trash proof.
+Published immutable `v0.1.57` binds release source `50ee8316`. Its publication
+service pull verifies that head with all seven dev16 PIDs unchanged. Later
+documentation-only main descendants are tracked by actual pull receipts. Public
+tag workflow `45617312164` succeeds in all four jobs. The exact sidecar, complete
+installer ZIP digest/CRC and anonymous public ARM64 DMG size/hash pass. Actual
+runner signing passes; Apple agreement HTTP 403 leaves the package unnotarized.
+Native Mac execution remains unverified. The
+[delivery plan](execution-plans/2026-11-23-mailbox-drafts.md) binds all evidence.
 
 The original 17-target order has zero remaining targets in Drafts at its first
 new-route execution; the unrelated later draft is preserved. Exact read-only
@@ -96,9 +109,9 @@ The old failed support generation stays fenced.
   formatter proof has one Sent, zero drafts, semantic approval and same-key
   accounting. Its uncontrolled recipient remains unobserved; dev14's separate
   controlled recipient proof remains historical. The extra controlled 518 case
-  fails and stays separate. Gmail A saved-edit/MCP-send and B unflagged Trash,
-  public Desktop release and separate final review remain open. Parent delivery
-  stays active.
+  fails and stays separate. Gmail A/B/C terminal checks pass with the stated
+  composed qualification. Public artifact verification passes. The primary
+  delivery plan and external closure receipts retain completion/review state.
 - Native automatic bootstrap, broad RPC parity, customer reply quality and full
   Desktop packaging retain the parent operator obligations. Historical MCP helper
   pairing does not establish wider kernel CLI or installed FULL acceptance.
@@ -112,10 +125,6 @@ The old failed support generation stays fenced.
 
 ## Next
 
-1. Complete Gmail A on the distinct current fixture and B on the Gmail-authored
-   draft. Preserve the absent original operation and its financial identities.
-2. Retain C, the original-17 result, ordinary tick scopes and current Desktop
-   opening. Preserve recurring pauses, restored cron and uncertain sends.
-3. Complete documentation criticism, separate final component review and public
-   release. Pull the actual service checkout immediately after Desktop main
-   advances and verify all seven runtime bindings again.
+1. Retain verified public artifact evidence under the primary delivery plan.
+2. Preserve Gmail qualifications, absent operations, ordinary tick scopes, pauses,
+   restored cron, budgets and all uncertain send identities.

@@ -1,5 +1,5 @@
 ---
-status: active
+status: completed
 created: 2026-11-23
 brief: ../briefs/2026-11-23-mailbox-drafts.md
 owners: [lead, engine, desktop]
@@ -72,8 +72,13 @@ They do not transfer provider coverage implicitly.
   independently human-answered source alone, without generation or sending.
 - [x] Successful corrected ordinary MrCall direct send with received/Sent,
   semantic, same-key recovery and accounting verification.
-- [ ] Public release and final installed review.
-- [ ] Gmail web verification of the controlled journey.
+- [x] Public tag workflow and exact anonymous installer asset verification.
+  Main and immutable `v0.1.57` are published.
+- [ ] Post-publication final installed review and documentation closure.
+- [x] Gmail A/B/C terminal verification with operator-reported browser actions,
+  independently verified provider outcomes and independently approved composed
+  recipient verification for A. Its uninterrupted literal Gmail-recipient-edit-to-
+  SMTP case remains unestablished.
 
 ## Deployment boundary
 
@@ -96,11 +101,18 @@ fixture; lead full-body visual review and closed-home token scan pass.
 Current dev16 ordinary direct-send proof has one Sent, zero drafts, approved
 semantics and stable same-key accounting, with no controlled recipient readback.
 The separate dev14 controlled recipient proof retains its version scope. The
-extra controlled 518 test remains unsuccessful. Gmail C external-send and
-old-handle refusal pass. Gmail A saved-edit/MCP-send, B unflagged Trash, public
-Desktop release and final review remain open. The public installer is v0.1.56.
-The governing HB takeover plan owns the combined evidence scope. This parent
-plan remains active until its required installed acceptance and final review.
+extra controlled 518 test remains unsuccessful. Gmail A/B/C terminal checks pass
+under the distinct cases below. Separate qualified component review and checker
+finalization precede publication. Published immutable public tag `v0.1.57` binds
+release source `50ee8316e1d9b793e2bbbc9a7520ef088c1f6b10`. Its publication service
+pull verifies that head with all seven actual engine PIDs unchanged on immutable
+dev16 product source `626d303d`. Later documentation-only main descendants are
+tracked by actual pull receipts.
+Public tag workflow [45617312164](https://github.com/hahnbanach/mrcall-desktop/actions/runs/45617312164)
+attempt 1 succeeds in all four jobs. Exact public installer verification exits
+zero with the terminal receipt below. The governing HB takeover plan owns the
+combined evidence scope. This plan stays active pending bounded documentation
+closure, post-publication final review and its declared checker transition.
 
 Recurring schedules remain paused outside bounded acceptance windows. The
 corrected ordinary MrCall run completes with exact cron and both pause files
@@ -109,6 +121,74 @@ saved engine budgets. Migration requires stopped real writers,
 fresh state digest and read-only exact Sent proof; it restores no discarded
 draft and retransmits no uncertain operation.
 
+
+## Verified public Desktop publication — 2026-11-25
+
+The actual terminal receipt is
+`desktop-publication-dev16-r4-final-20261125/public-verification.json` under the
+November 24 private evidence root, SHA-256
+`841aa0c7349a98dff5542f854c09434ed268f0cdbed7fae9546fc089d8558061`.
+Public tag workflow `45617312164`, attempt 1, completes all four jobs successfully
+on source `50ee8316e1d9b793e2bbbc9a7520ef088c1f6b10` and immutable `v0.1.57`.
+Consumed sidecar artifact `15022528181` has SHA-256
+`7acd714ae57414e71a6a8215fdeeb15bc92242f380133da199086bddc19efbd1`.
+Complete installer ZIP artifact `15022593772` has SHA-256
+`3998f3ea6fdaa3a4246ff3a4f97ca459c4113000536cabff0389b0ca38ee660d`;
+full CRC verification passes. The anonymously fetched public
+[ARM64 DMG](https://github.com/hahnbanach/mrcall-desktop/releases/download/v0.1.57/MrCall.Desktop-0.1.57-arm64.dmg)
+is exactly 249,599,199 bytes with SHA-256
+`f46d4c6cbfc02371b2edcd24b20a9ffe51dc2e86cd7ec6ca9aae834011a91de7`,
+matching the installer ZIP member. Actual runner distribution signing succeeds.
+Apple's agreement-related HTTP 403 leaves this signed fallback unnotarized.
+Native Mac execution and independent Mac signature validation are unverified.
+
+## Gmail client terminal acceptance — 2026-11-25
+
+Evidence is under `/home/mal/.local/share/mrcall-operational-evidence/2026-11-24/`.
+The three cases use their own bound identities; none substitutes for the retired
+original M4 draft, ordinary dev16 recipient readback or the failed controlled 518
+case. Browser actions are operator-reported and independently read through the
+provider; no agent-observed Gmail browser interaction is claimed.
+
+Independent framing review is APPROVED in
+`/tmp/mrcall-ai-kit/composed-recipient-framing-review-20261125/report.md`, SHA-256
+`b2d3f61b15139717adada933a14410a930f843ea09923f67eeb1c220c3d01daf`.
+Its approved HB continuation brief snapshot has SHA-256
+`c89bbe2ecafad7799a7968160ad89e34aa73a5618f75e3f3275edf0686e8cded`.
+Complete ledger comparison and seven source files identical to installed source
+`626d303d` establish the common native MIME reader with no client-origin branch.
+Actual Gmail recipient/body ingestion before correction and current native MCP
+send/replay are accepted as composed verification. All 223 saved body bytes remain
+unchanged across correction, Sent and recipient readback. The literal uninterrupted
+Gmail-recipient-edit-to-SMTP case remains unestablished; this is an engineering
+verification qualification, with browser actions still operator-reported.
+
+- A: `gmail-client-A-independent-dev16-20261125/transaction/final.json`, SHA-256
+  `48a7dd14c2d4007adef4a8a5106fae51e6651e71bd413ea8235967569f25e30d`.
+  The explicit RPC fixture receives one actual MCP send and original-key replay
+  of the same canonical operation. Independent counts are one Sent, one received
+  and zero drafts. The exact saved 223-byte body has SHA-256
+  `da75ec9dd1b5452606c7ba64912b7301a28a205e81944f48de44dd6357dfcec6`.
+  The lead approves its controlled reference, total 254, signature and Gmail edit
+  marker. Gmail's saved body edit is verified. The engine subsequently corrects
+  the sole intended controlled recipient while preserving those exact body bytes,
+  with one prior update receipt and zero SMTP. A correct recipient saved by the
+  human in Gmail is not established. All older rows and generation/accounting
+  remain unchanged; the send adds one exact named receipt. The correction receipt
+  is `recipient-correction-final.json` and its qualification is retained in
+  `acceptance-summary.json` within the same packet.
+- B: `gmail-client-B-final-20261125/transaction/final.json`, SHA-256
+  `fb28de9653a7f4c10cd622ce9cee6457deb6e09b61d0f1fd7e45785beeca093a`.
+  One exact unflagged Gmail-authored draft is in recoverable Trash, with zero
+  drafts, Sent or received messages. One exact Trash receipt is added; all older
+  engine rows and billing remain unchanged. This result asserts no A state.
+- C: `gmail-client-C-independent-dev16-20261125/transaction/C-final.json`, SHA-256
+  `7f153242d4c5e769f8ea39439885ed7f2bf0d5ba8b0649f9c87636f99a8d2a96`.
+  Independent provider observations verify one externally sent message in Sent,
+  one received and zero drafts. A public MCP attempt on the exact old handle
+  returns typed `draft_not_found`, with zero new ledger rows or recreated drafts.
+  Gmail assigns a different Message-ID and normalizes a trailing space; the
+  actual delivered body and its preserved meaning are the verified comparison.
 
 ## Installed dev15 checkpoint — 2026-11-25 05:49 UTC — historical
 

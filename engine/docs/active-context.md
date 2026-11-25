@@ -32,7 +32,8 @@ Both normal clones install the actual public HTTPS kernel `v0.76.1`. The first o
 Café tick on dev12 prepares one draft with zero replies. Packaged Linux Desktop
 has opening proof for that draft on dev15; the old object is now absent. A new
 controlled dev16 preparation has an approved 197-byte body; its old handle is
-absent. Recovery retains its operation, reservation and body without recreation.
+absent. Recovery retains its operation, reservation and body without recreation;
+instruction metadata changes.
 A distinct explicit RPC-created fixture has one create and zero model/SMTP
 submissions; current packaged Desktop opens it with visual and token-scan proof.
 The current ordinary formatter proof has one Sent, zero drafts, semantic approval
@@ -40,6 +41,26 @@ and stable same-key costs. Its recipient remains unobserved; the controlled
 dev14 recipient proof retains its earlier scope. See the
 [leaf plan](../../docs/execution-plans/2026-11-23-mailbox-drafts.md) for exact
 evidence and remaining acceptance.
+
+Gmail A uses the distinct explicit RPC fixture, separately from retired UID 2516.
+One MCP send and original-key replay yield one Sent, one received and zero drafts
+with the exact 223-byte saved body. The operator's Gmail body edit is independently
+read; one engine update corrects the sole intended test recipient beforehand.
+Independent review approves composed recipient verification through the same native
+MIME reader with no client-origin branch. The literal uninterrupted Gmail-recipient-
+edit-to-SMTP case remains unestablished; the leaf plan binds the approved report.
+Browser actions remain operator-reported.
+B moves the exact unflagged Gmail-authored draft to recoverable Trash with one
+receipt and zero Sent/received. C external send has one Sent/received and zero
+drafts; its old handle returns a typed refusal with zero new rows or recreation.
+Old ledger rows, generation and accounting remain unchanged in all three cases.
+Published immutable `v0.1.57` binds release source `50ee8316`; its publication
+service pull verifies that head with all seven dev16 PIDs unchanged. Later
+documentation-only main descendants are tracked by actual pull receipts. Public tag
+workflow `45617312164` succeeds in all four jobs. Exact sidecar and complete
+installer ZIP digest/CRC pass; the anonymous public ARM64 DMG matches its released
+member. Actual runner signing passes. Apple agreement HTTP 403 leaves the package
+unnotarized; native Mac execution remains unverified.
 
 The original 17-target instruction is complete conditionally: none is present
 at the first new-route execution, zero messages move and the unrelated later
@@ -93,9 +114,10 @@ result to its observed version.
 
 ## Unresolved
 
-- Kernel FULL and both public-tag installations pass. Gmail C external send and
-  no-recreation pass. Gmail A saved-edit/send and B unflagged Trash, public
-  installer and final review remain open. The extra controlled dev16 518 case
+- Kernel FULL and both public-tag installations pass. Gmail A/B/C terminal
+  checks pass with the stated fixture, recipient and browser qualifications.
+  Public installer asset verification passes; the primary delivery plan and
+  external closure receipts retain completion/review state. The extra dev16 518 case
   fails; the separately verified ordinary reply does not change that outcome.
   Three older controlled messages retain exact recoverable Trash proof with
   unknown cause. The original-17 result remains zero moves, fourteen located
@@ -126,12 +148,10 @@ result to its observed version.
 
 ## Next
 
-1. Complete Gmail A/B on their exact current fixtures. Preserve absent original
-   operations, restored cron and pauses, and every uncertain send identity.
-2. Complete Gmail client evidence, current Desktop release provenance,
-   documentation and separate final review. Verify public provenance and all
-   seven process identities after the published Desktop main reaches the
-   actual service checkout.
+1. Preserve Gmail A/B/C terminal evidence and absent original operations.
+2. Retain verified public installer evidence under the primary delivery plan.
+   Preserve the actual service pull receipt and all seven unchanged dev16 process
+   bindings; external closure receipts retain check/review outcomes.
 3. Preserve saved budgets and pending receipt state. Compatible rollback
    preserves uncertain send identities and discarded drafts stay discarded.
 4. Continue unrelated Qonto, PEC, mnemonic, billing and voice work only under
