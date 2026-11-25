@@ -10,7 +10,8 @@ import secrets
 import time
 from uuid import uuid4
 
-from sqlalchemy import Column, Float, MetaData, String, Table, Text, UniqueConstraint, select
+from sqlalchemy import Column, Float, ForeignKey, MetaData, String, Table, Text, UniqueConstraint, select
+from sqlalchemy.schema import CreateTable
 
 logger = logging.getLogger(__name__)
 _metadata = MetaData()
@@ -31,6 +32,14 @@ RECEIPTS = Table(
     Column("created_at", Float, nullable=False),
     Column("updated_at", Float, nullable=False),
     UniqueConstraint("owner", "request_key"),
+)
+
+REQUEST_ALIASES = Table(
+    "mailbox_operation_request_aliases", _metadata,
+    Column("owner", String, primary_key=True),
+    Column("request_key", String, primary_key=True),
+    Column("receipt_id", String, ForeignKey("mailbox_operation_receipts.id"), nullable=False),
+    Column("created_at", Float, nullable=False),
 )
 
 
@@ -57,7 +66,9 @@ class MailboxOperations:
             from .database import get_engine
             engine = get_engine()
         self.engine = engine
-        _metadata.create_all(engine)
+        with engine.begin() as conn:
+            for table in _metadata.sorted_tables:
+                conn.execute(CreateTable(table, if_not_exists=True))
 
     @contextmanager
     def writer(self):
@@ -71,11 +82,40 @@ class MailboxOperations:
                 conn.rollback()
                 raise
 
+    @staticmethod
+    def _lookup(conn, owner, request_key):
+        row = conn.execute(select(RECEIPTS).where(
+            RECEIPTS.c.owner == owner, RECEIPTS.c.request_key == request_key,
+        )).mappings().one_or_none()
+        alias = conn.execute(select(REQUEST_ALIASES.c.receipt_id).where(
+            REQUEST_ALIASES.c.owner == owner, REQUEST_ALIASES.c.request_key == request_key,
+        )).scalar_one_or_none()
+        if alias is not None:
+            if row is not None:
+                raise ReceiptConflict("request_key_payload_conflict")
+            row = conn.execute(select(RECEIPTS).where(
+                RECEIPTS.c.owner == owner, RECEIPTS.c.id == alias,
+            )).mappings().one_or_none()
+            if row is None:
+                raise ReceiptConflict("mailbox_request_alias_invalid")
+        return row
+
+    @staticmethod
+    def _matching(row, binding):
+        if any(row[name] != value for name, value in binding.items()):
+            raise ReceiptConflict("request_key_payload_conflict")
+
+    @classmethod
+    def _alias(cls, conn, row, request_key, binding):
+        cls._matching(row, binding)
+        conn.execute(REQUEST_ALIASES.insert().values(
+            owner=row["owner"], request_key=request_key, receipt_id=row["id"], created_at=time.time(),
+        ))
+        return _public(row), None
+
     def read(self, owner, request_key):
         with self.engine.connect() as conn:
-            row = conn.execute(select(RECEIPTS).where(
-                RECEIPTS.c.owner == owner, RECEIPTS.c.request_key == request_key,
-            )).mappings().one_or_none()
+            row = self._lookup(conn, owner, request_key)
         return _public(row)
 
     def for_draft(self, owner, draft_id, kind="send", *, active_only=False):
@@ -90,6 +130,28 @@ class MailboxOperations:
             rows = conn.execute(query.order_by(RECEIPTS.c.created_at)).mappings().all()
         return _public(rows[0]) if rows else None
 
+    def bind_recovery(self, *, owner, request_key, receipt_id, kind, target):
+        if kind not in {"send", "trash"}:
+            raise ReceiptConflict("invalid_mailbox_operation")
+        if not isinstance(request_key, str) or not 16 <= len(request_key) <= 256:
+            raise ReceiptConflict("stable_request_key_required")
+        if any(not isinstance(value, str) for value in (owner, receipt_id, target)):
+            raise ReceiptConflict("invalid_mailbox_binding")
+        with self.writer() as conn:
+            observed = conn.execute(select(RECEIPTS).where(
+                RECEIPTS.c.owner == owner, RECEIPTS.c.id == receipt_id,
+            )).mappings().one_or_none()
+            if observed is None:
+                raise ReceiptConflict("mailbox_operation_not_found")
+            binding = {"kind": kind, "target": target}
+            self._matching(observed, binding)
+            old = self._lookup(conn, owner, request_key)
+            if old is not None:
+                if old["id"] != observed["id"]:
+                    raise ReceiptConflict("request_key_payload_conflict")
+                return _public(observed)
+            return self._alias(conn, observed, request_key, binding)[0]
+
     def reserve(self, *, owner, request_key, kind, target, source="", payload_digest,
                 message_id=""):
         if kind not in {"create", "send", "send_message", "trash", "update"}:
@@ -99,15 +161,10 @@ class MailboxOperations:
         if any(not isinstance(v, str) for v in (owner, target, source, payload_digest)):
             raise ReceiptConflict("invalid_mailbox_binding")
         with self.writer() as conn:
-            old = conn.execute(select(RECEIPTS).where(
-                RECEIPTS.c.owner == owner, RECEIPTS.c.request_key == request_key,
-            )).mappings().one_or_none()
+            binding = {"kind": kind, "target": target, "source": source, "payload_digest": payload_digest}
+            old = self._lookup(conn, owner, request_key)
             if old is not None:
-                if any(old[k] != v for k, v in {
-                    "kind": kind, "target": target, "source": source,
-                    "payload_digest": payload_digest,
-                }.items()):
-                    raise ReceiptConflict("request_key_payload_conflict")
+                self._matching(old, binding)
                 return _public(old), None
             if kind == "send":
                 prior_send = conn.execute(select(RECEIPTS).where(
@@ -115,7 +172,7 @@ class MailboxOperations:
                     RECEIPTS.c.kind == "send", RECEIPTS.c.stage != "not_dispatched",
                 ).order_by(RECEIPTS.c.created_at)).mappings().first()
                 if prior_send is not None:
-                    return _public(prior_send), None
+                    return self._alias(conn, prior_send, request_key, binding)
             if kind == "update":
                 sent_target = conn.execute(select(RECEIPTS.c.id).where(
                     RECEIPTS.c.owner == owner, RECEIPTS.c.target == target,
@@ -130,7 +187,7 @@ class MailboxOperations:
                     RECEIPTS.c.stage.in_(["reserved", "dispatch_possible", "unconfirmed"]),
                 ).order_by(RECEIPTS.c.created_at)).mappings().first()
                 if prior_trash is not None:
-                    return _public(prior_trash), None
+                    return self._alias(conn, prior_trash, request_key, binding)
             if kind in {"send", "update"}:
                 conflicting_kinds = ["update"] if kind == "send" else ["send", "update"]
                 active_target = conn.execute(select(RECEIPTS.c.kind).where(

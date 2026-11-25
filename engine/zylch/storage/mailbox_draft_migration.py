@@ -11,7 +11,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy import MetaData, Table, inspect, select
 
-from .mailbox_operations import MailboxOperations, RECEIPTS
+from .mailbox_operations import MailboxOperations, RECEIPTS, ReceiptConflict
 
 LEGACY_TABLES = ("drafts", "draft_provider_operations", "operator_reply_operations", "campaigns", "campaign_contacts")
 REQUIRED = {
@@ -254,6 +254,12 @@ class MailboxDraftMigration:
             candidates = self._candidates(data)
             _fenced(writer_fence)
             for candidate in candidates:
+                try:
+                    existing = operations._lookup(conn, self.owner, candidate["request_key"])
+                except ReceiptConflict:
+                    raise MigrationRefusal("legacy_receipt_identity_conflict") from None
+                if existing is not None and existing["request_key"] != candidate["request_key"]:
+                    raise MigrationRefusal("legacy_receipt_identity_conflict")
                 proof, lookup_status = _sent_proof(sent_lookup, candidate["message_id"], self.owner)
                 stage = "completed" if proof else (
                     "not_dispatched" if candidate["legacy_stage"] in {"reserved", "inventoried", "not_dispatched"}
@@ -265,9 +271,6 @@ class MailboxDraftMigration:
                           "legacy_internal_draft_discarded": True}
                 if proof:
                     result["sent"] = proof
-                existing = conn.execute(select(RECEIPTS).where(
-                    RECEIPTS.c.owner == self.owner, RECEIPTS.c.request_key == candidate["request_key"],
-                )).mappings().one_or_none()
                 binding = {key: candidate[key] for key in ("target", "source", "message_id", "payload_digest")}
                 if existing is not None:
                     if existing["kind"] != "send" or any(existing[k] != v for k, v in binding.items()):

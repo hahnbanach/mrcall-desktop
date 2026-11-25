@@ -554,3 +554,40 @@ def test_genuine_standalone_send_preserves_message_identity_without_fencing_anot
     fresh, token = store.reserve(owner=OWNER, request_key="another-synthetic-create", kind="create", target="thread",
                                  source=SOURCE, payload_digest="different")
     assert token and fresh["stage"] == "reserved" and provider.mutations == []
+
+
+def test_import_cannot_overwrite_accepted_alias_and_rolls_back_all_legacy_discard(database):
+    from zylch.storage.mailbox_operations import REQUEST_ALIASES
+
+    add_draft(database, status="sending")
+    add_operation(database, identifier="operation-0")
+    add_operation(database)
+    store = MailboxOperations(database[0])
+    original, _ = store.reserve(owner=OWNER, request_key="private-canonical-request", kind="send",
+        target="native-draft", source="<other-source@example.test>", payload_digest="original-digest",
+        message_id="<other-send@example.test>")
+    store.bind_recovery(owner=OWNER, request_key="legacy-send:operation-1", receipt_id=original["id"],
+                        kind="send", target=original["target"])
+    before = {table.name: rows(database, table) for table in (database[1], database[2], RECEIPTS, REQUEST_ALIASES)}
+    provider = Provider()
+    with pytest.raises(MigrationRefusal, match="legacy_receipt_identity_conflict"):
+        apply(database, provider)
+    assert {table.name: rows(database, table) for table in (database[1], database[2], RECEIPTS, REQUEST_ALIASES)} == before
+    assert provider.lookups == [MID] and provider.mutations == []
+    database[0].dispose()
+    assert MailboxOperations(database[0]).read(OWNER, "legacy-send:operation-1") == original
+
+
+def test_foreign_owner_alias_does_not_occupy_importing_owner_namespace(database):
+    add_draft(database, status="sending")
+    add_operation(database)
+    store = MailboxOperations(database[0])
+    other = "other@example.test"
+    original, _ = store.reserve(owner=other, request_key="foreign-canonical-request", kind="send",
+        target="native-draft", source="<other-source@example.test>", payload_digest="original-digest")
+    store.bind_recovery(owner=other, request_key="legacy-send:operation-1", receipt_id=original["id"],
+                        kind="send", target=original["target"])
+    result = apply(database, Provider())
+    assert result["imported_send_receipts"] == result["discarded_internal_drafts"] == 1
+    assert store.read(other, "legacy-send:operation-1") == original
+    assert store.read(OWNER, "legacy-send:operation-1")["id"] != original["id"]

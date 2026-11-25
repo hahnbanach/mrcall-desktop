@@ -74,15 +74,18 @@ def send(service, draft_id, request_key):
     if is_scheduled():
         raise MailboxDraftError("scheduled_existing_draft_preserved", draft_id=draft_id)
     identifier = native_id(service.owner, draft_id)
-    service._updates_safe(draft_id)
     previous = service.operation(request_key)
     if previous is not None:
         if previous["kind"] != "send" or previous["target"] != draft_id:
             raise MailboxDraftError("request_key_payload_conflict")
+        service._updates_safe(draft_id)
         return confirm(service, previous, retire=True)
     previous = service.operations.for_draft(service.owner, draft_id)
     if previous is not None:
+        previous = service._bind_recovery(request_key, previous, draft_id)
+        service._updates_safe(draft_id)
         return confirm(service, previous, retire=True)
+    service._updates_safe(draft_id)
     # The current exact IMAP message is read before claiming the operation so
     # every send path shares the exact RFC inbound identity in its durable fence.
     with service.provider() as client:
@@ -90,6 +93,7 @@ def send(service, draft_id, request_key):
     if current is None:
         previous = service.operations.for_draft(service.owner, draft_id)
         if previous is not None:
+            previous = service._bind_recovery(request_key, previous, draft_id)
             return confirm(service, previous, retire=True)
         provenance = service.operations.provenance(service.owner, draft_id)
         receipt, token = service._reserve(request_key, "send", draft_id,

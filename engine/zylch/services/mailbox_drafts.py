@@ -82,7 +82,19 @@ class MailboxDrafts:
         return {"state": "eligible"}
 
     def operation(self, request_key):
-        return self.operations.read(self.owner, request_key)
+        try:
+            return self.operations.read(self.owner, request_key)
+        except ReceiptConflict as error:
+            raise MailboxDraftError(str(error)) from None
+
+    def _bind_recovery(self, request_key, receipt, draft_id):
+        try:
+            return self.operations.bind_recovery(
+                owner=self.owner, request_key=request_key or str(uuid4()),
+                receipt_id=receipt["id"], kind="send", target=draft_id,
+            )
+        except ReceiptConflict as error:
+            raise MailboxDraftError(str(error)) from None
 
     def _reserve(self, request_key, kind, target, source, payload):
         try:
