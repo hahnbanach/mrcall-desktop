@@ -1,7 +1,13 @@
 import json
 from email.utils import getaddresses
 
-from .operator_reply_operations import ReplyRefusal, ReviewRequired
+from .operator_reply_operations import (
+    MAX_REVIEW_FACT_BYTES,
+    MAX_REVIEW_FACTS,
+    MAX_REVIEW_REASON_BYTES,
+    ReplyRefusal,
+    ReviewRequired,
+)
 
 
 _REPLY_SCHEMA = {
@@ -57,7 +63,10 @@ async def generate(context, request_text):
                        "do not infer their contents. Do not extend a minimum, price or condition to another product or quantity. "
                        "When published instructions require internal escalation or necessary facts are missing, do not compose a reply. "
                        "Return the reply decision in the required JSON schema. For a draft, write the plain text reply. "
-                       "For needs_review, give an internal reason and the missing facts. "
+                       "For needs_review, explain why internal review is necessary in a nonblank reason "
+                       f"of at most {MAX_REVIEW_REASON_BYTES} UTF-8 bytes. List only genuinely missing facts in missing_facts, "
+                       f"up to {MAX_REVIEW_FACTS} entries, each a nonblank string of at most {MAX_REVIEW_FACT_BYTES} UTF-8 bytes. "
+                       "When policy requires escalation and no facts are missing, return an empty missing_facts array. "
                        "No tools, sending, external retrieval or other effects are available.",
                 messages=[{"role": "user", "content": json.dumps({"context": prompt_context, "request": request_text}, ensure_ascii=False)}],
                 max_tokens=4096,

@@ -25,6 +25,9 @@ _PRE_DISPATCH_REFUSALS = {
     "structured_draft_required", "structured_reply_decision_required",
     "incomplete_or_tool_generation_refused", "generation_response_too_large",
     "bounded_plain_draft_body_required", "bounded_internal_review_required",
+    "review_reason_not_string", "review_reason_blank", "review_reason_invalid_utf8", "review_reason_too_large",
+    "review_missing_facts_not_array", "review_missing_facts_too_many",
+    "review_fact_not_string", "review_fact_blank", "review_fact_invalid_utf8", "review_fact_too_large",
     "reply_generation_provider_error", "reply_generation_budget_or_provider_refusal",
     "authorized_context_changed", "current_instruction_versions_required", "exact_source_required",
     "scheduled_answered", "scheduled_draft_exists", "profile_binding_changed",
@@ -47,16 +50,37 @@ _PRE_DISPATCH_STAGES = {
 }
 
 
+MAX_REVIEW_REASON_BYTES = 4096
+MAX_REVIEW_FACTS = 20
+MAX_REVIEW_FACT_BYTES = 1024
+
+
+def _validate_review_text(value, field, max_bytes):
+    if not isinstance(value, str):
+        raise ReplyRefusal(f"{field}_not_string")
+    if not value.strip():
+        raise ReplyRefusal(f"{field}_blank")
+    try:
+        encoded = value.encode("utf-8")
+    except UnicodeEncodeError:
+        raise ReplyRefusal(f"{field}_invalid_utf8") from None
+    if len(encoded) > max_bytes:
+        raise ReplyRefusal(f"{field}_too_large")
+
+
 @dataclass(frozen=True)
 class ReviewRequired:
     reason: str
     missing_facts: list[str]
 
     def __post_init__(self):
-        if (not isinstance(self.reason, str) or not self.reason.strip() or len(self.reason.encode()) > 4096
-                or not isinstance(self.missing_facts, list) or not 1 <= len(self.missing_facts) <= 20
-                or any(not isinstance(item, str) or not item.strip() or len(item.encode()) > 1024 for item in self.missing_facts)):
-            raise ReplyRefusal("bounded_internal_review_required")
+        _validate_review_text(self.reason, "review_reason", MAX_REVIEW_REASON_BYTES)
+        if not isinstance(self.missing_facts, list):
+            raise ReplyRefusal("review_missing_facts_not_array")
+        if len(self.missing_facts) > MAX_REVIEW_FACTS:
+            raise ReplyRefusal("review_missing_facts_too_many")
+        for fact in self.missing_facts:
+            _validate_review_text(fact, "review_fact", MAX_REVIEW_FACT_BYTES)
 
 
 @dataclass(frozen=True)
