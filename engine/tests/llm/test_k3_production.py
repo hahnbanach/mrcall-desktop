@@ -256,9 +256,9 @@ def test_explicit_controls_not_silently_overwritten(monkeypatch, controls):
 
 @pytest.mark.parametrize("model", [k3.MODEL, "z-ai/glm-5.2"])
 def test_strict_schema_reaches_selected_router_without_changing_route_or_spend_controls(ledger, model):
-    schema = {"type": "object", "properties": {"answer": {"type": "string"}},
-              "required": ["answer"], "additionalProperties": False}
-    form = {"type": "json_schema", "schema": schema}
+    from zylch.services.operator_reply_generation import _REPLY_SCHEMA
+
+    form = {"type": "json_schema", "schema": _REPLY_SCHEMA}
     seen = []
 
     def reply(request):
@@ -267,10 +267,11 @@ def test_strict_schema_reaches_selected_router_without_changing_route_or_spend_c
         assert body["model"] == model and body["provider"]["require_parameters"] is True
         assert "tools" not in body and "tool_choice" not in body
         if model == k3.MODEL:
+            assert body["provider"]["only"] == ["digitalocean"] and body["provider"]["allow_fallbacks"] is False
             assert request.url.path == "/api/v1/chat/completions"
             assert body["max_tokens"] == 8192 and body["reasoning"] == {"effort": "max"}
             assert body["response_format"] == {"type": "json_schema", "json_schema": {
-                "name": "structured_response", "strict": True, "schema": schema}}
+                "name": "structured_response", "strict": True, "schema": _REPLY_SCHEMA}}
             return response()
         assert request.url.path == "/api/v1/messages" and body["output_config"] == {"format": form}
         return httpx.Response(200, json={"model": model, "stop_reason": "end_turn",

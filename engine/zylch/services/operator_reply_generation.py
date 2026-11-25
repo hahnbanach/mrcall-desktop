@@ -7,32 +7,19 @@ from .operator_reply_operations import (
     MAX_REVIEW_REASON_BYTES,
     ReplyRefusal,
     ReviewRequired,
+    _validate_review_text,
 )
 
 
 _REPLY_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["reply"],
+    "required": ["decision", "body", "reason", "missing_facts"],
     "properties": {
-        "reply": {"anyOf": [
-            {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["decision", "body"],
-                "properties": {"decision": {"type": "string", "enum": ["draft"]}, "body": {"type": "string"}},
-            },
-            {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["decision", "reason", "missing_facts"],
-                "properties": {
-                    "decision": {"type": "string", "enum": ["needs_review"]},
-                    "reason": {"type": "string"},
-                    "missing_facts": {"type": "array", "items": {"type": "string"}},
-                },
-            },
-        ]},
+        "decision": {"type": "string", "enum": ["draft", "needs_review"]},
+        "body": {"type": "string"},
+        "reason": {"type": "string"},
+        "missing_facts": {"type": "array", "items": {"type": "string"}},
     },
 }
 
@@ -62,9 +49,13 @@ async def generate(context, request_text):
                        "Distinguish earlier proposals from confirmed current facts. History is partial. Attachments are unread; "
                        "do not infer their contents. Do not extend a minimum, price or condition to another product or quantity. "
                        "When published instructions require internal escalation or necessary facts are missing, do not compose a reply. "
-                       "Return the reply decision in the required JSON schema. For a draft, write the plain text reply. "
-                       "For needs_review, explain why internal review is necessary in a nonblank reason "
-                       f"of at most {MAX_REVIEW_REASON_BYTES} UTF-8 bytes. List only genuinely missing facts in missing_facts, "
+                       "Return one object with decision, body, reason, and missing_facts. "
+                       "For draft, put only the nonblank plain-text reply in body (at most 65536 UTF-8 bytes), "
+                       "and return an empty missing_facts array. The internal reason may be empty for a draft. "
+                       "For needs_review, leave body empty and explain why internal review is necessary in reason. "
+                       f"Any nonempty reason must be nonblank and at most {MAX_REVIEW_REASON_BYTES} UTF-8 bytes. "
+                       "Keep this explanation separate from the outgoing body. "
+                       "List only genuinely missing facts in missing_facts, "
                        f"up to {MAX_REVIEW_FACTS} entries, each a nonblank string of at most {MAX_REVIEW_FACT_BYTES} UTF-8 bytes. "
                        "When policy requires escalation and no facts are missing, return an empty missing_facts array. "
                        "No tools, sending, external retrieval or other effects are available.",
@@ -79,20 +70,34 @@ async def generate(context, request_text):
     if not response.complete_text_only:
         raise ReplyRefusal("incomplete_or_tool_generation_refused")
     text = "".join(block.text for block in response.content)
-    if len(text.encode()) > 70000:
+    try:
+        size = len(text.encode("utf-8"))
+    except UnicodeEncodeError:
+        raise ReplyRefusal("structured_draft_required") from None
+    if size > 70000:
         raise ReplyRefusal("generation_response_too_large")
     try:
-        envelope = json.loads(text, object_pairs_hook=_unique_object)
+        value = json.loads(text, object_pairs_hook=_unique_object)
     except (ValueError, TypeError):
         raise ReplyRefusal("structured_draft_required") from None
-    if not isinstance(envelope, dict) or set(envelope) != {"reply"}:
+    if not isinstance(value, dict) or value.keys() != _REPLY_SCHEMA["properties"].keys():
         raise ReplyRefusal("structured_reply_decision_required")
-    value = envelope["reply"]
-    if isinstance(value, dict) and set(value) == {"decision", "body"} and value["decision"] == "draft" and isinstance(value["body"], str):
-        return value["body"]
-    if isinstance(value, dict) and set(value) == {"decision", "reason", "missing_facts"} and value["decision"] == "needs_review":
-        return ReviewRequired(value["reason"], value["missing_facts"])
-    raise ReplyRefusal("structured_reply_decision_required")
+    body, reason, facts = value["body"], value["reason"], value["missing_facts"]
+    if value["decision"] == "needs_review" and body == "":
+        return ReviewRequired(reason, facts)
+    if value["decision"] != "draft" or facts != [] or not isinstance(body, str):
+        raise ReplyRefusal("structured_reply_decision_required")
+    if reason != "":
+        _validate_review_text(reason, "review_reason", MAX_REVIEW_REASON_BYTES)
+    if not body.strip():
+        raise ReplyRefusal("bounded_plain_draft_body_required")
+    try:
+        body_size = len(body.encode("utf-8"))
+    except UnicodeEncodeError:
+        raise ReplyRefusal("bounded_plain_draft_body_required") from None
+    if body_size > 65536:
+        raise ReplyRefusal("bounded_plain_draft_body_required")
+    return body
 
 
 def reply_fields(source, actor):

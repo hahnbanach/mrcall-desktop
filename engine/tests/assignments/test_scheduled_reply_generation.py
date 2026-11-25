@@ -25,16 +25,19 @@ from zylch.storage.models import LlmReservation, LlmUsage
 from zylch.storage.storage import Storage
 
 
-DRAFT = {"reply": {"decision": "draft", "body": "The requested answer."}}
-REVIEW = {"reply": {"decision": "needs_review", "reason": "Price requires confirmation.", "missing_facts": ["Price"]}}
+DRAFT = {"decision": "draft", "body": "The requested answer.", "reason": "", "missing_facts": []}
+REVIEW = {"decision": "needs_review", "body": "", "reason": "Price requires confirmation.", "missing_facts": ["Price"]}
+PRIVATE_REASON = "Internal explanation: the sender supplied the current terms."
 
 
 def review_decision(**fields):
-    return {"reply": {**REVIEW["reply"], **fields}}
+    return {**REVIEW, **fields}
 
 
 def text_block(value):
-    return {"type": "text", "text": json.dumps(value)}
+    # Keep real UTF-8 byte lengths, while escaped lone surrogates can exercise field validation.
+    text = json.dumps(value, ensure_ascii=False).encode("utf-8", "backslashreplace").decode("utf-8")
+    return {"type": "text", "text": text}
 
 
 @pytest.fixture
@@ -75,6 +78,7 @@ def scheduled(env, journey, monkeypatch):
     with anthropic.Anthropic(api_key="fixture", max_retries=0, http_client=anthropic.DefaultHttpxClient(
             transport=sdk_http.MockTransport(respond))) as sdk:
         client._client = sdk
+        fixture.client = client
         monkeypatch.setattr("zylch.llm.make_llm_client", lambda: client)
         monkeypatch.setattr(generation, "generate", generate)
         yield fixture
@@ -96,15 +100,36 @@ def test_request_with_stale_instructions_refuses_before_model_or_mailbox_dispatc
     assert NativeMailbox.transmissions == NativeMailbox.creates == 0
 
 
+@pytest.mark.parametrize("mode", ["draft", "send"])
+def test_unpriced_route_refuses_before_sdk_or_mailbox_dispatch(env, scheduled, mode):
+    scheduled.params["mode"] = mode
+    scheduled.client.model = "unpriced-fixture-model"
+    first = asyncio.run(invoke(scheduled))
+    assert first["state"] == "failed_before_dispatch" and first["effect_certainty"] == "not-dispatched"
+    assert first["cause"] == "reply_generation_budget_or_provider_refusal"
+    env.select("alice")
+    assert asyncio.run(invoke(scheduled)) == asyncio.run(invoke(scheduled, recover_only=True)) == first
+    assert not scheduled.calls and not paid_attempts() and first["reservation_ids"] == []
+    with db.get_session() as session:
+        assert session.query(LlmUsage).count() == 0
+    with db.get_engine().connect() as conn:
+        assert conn.exec_driver_sql("SELECT COUNT(*) FROM mailbox_operation_receipts").scalar_one() == 0
+    assert NativeMailbox.creates == NativeMailbox.transmissions == NativeMailbox.updates == 0
+    assert not NativeMailbox.trash
+
+
+@pytest.mark.parametrize("mode", ["draft", "send"])
 @pytest.mark.parametrize("decision", [
     DRAFT,
+    {**DRAFT, "reason": PRIVATE_REASON},
+    {**DRAFT, "body": "é" * 32768, "reason": "é" * 2048},
     REVIEW,
     review_decision(reason="Published instructions require supervisor approval.", missing_facts=[]),
     review_decision(reason="é" * 2048, missing_facts=["é" * 512] + [f"Fact {n}" for n in range(1, 20)]),
-], ids=["send", "review", "policy-escalation", "inclusive-utf8-and-count-limits"])
-def test_scheduled_decision_uses_exact_context_and_one_native_schema(env, scheduled, decision):
-    if decision["reply"].get("missing_facts") == []:
-        scheduled.params["mode"] = "draft"
+], ids=["draft", "internal-reason", "draft-inclusive-limits", "review", "policy-escalation", "review-inclusive-limits"])
+def test_scheduled_decision_uses_exact_context_and_one_native_schema(env, scheduled, mode, decision):
+    scheduled.params["mode"] = mode
+    if decision["decision"] == "needs_review" and not decision["missing_facts"]:
         policy = b64encode(b"All replies require supervisor approval.").decode()
         project_store.write(env.space, "operator-instructions", "procedures.md", policy, 1, "fixture")
     scheduled.payload["content"] = [text_block(decision)]
@@ -112,64 +137,112 @@ def test_scheduled_decision_uses_exact_context_and_one_native_schema(env, schedu
     assert result["ok"], result
     assert len(scheduled.calls) == 1
     wire = scheduled.calls[0]
-    assert wire["model"] == "claude-sonnet-4-5"
+    assert wire["model"] == "claude-sonnet-4-5" and wire["max_tokens"] == 4096
     assert "tools" not in wire and "tool_choice" not in wire
     form = wire["output_config"]["format"]
     assert form["type"] == "json_schema"
-    assert "nonblank reason of at most 4096 UTF-8 bytes" in wire["system"]
+    assert "nonblank and at most 4096 UTF-8 bytes" in wire["system"]
     assert "up to 20 entries, each a nonblank string of at most 1024 UTF-8 bytes" in wire["system"]
     assert "When policy requires escalation and no facts are missing, return an empty missing_facts array" in wire["system"]
+    assert form["schema"] == {
+        "type": "object", "additionalProperties": False, "required": ["decision", "body", "reason", "missing_facts"],
+        "properties": {
+            "decision": {"type": "string", "enum": ["draft", "needs_review"]}, "body": {"type": "string"},
+            "reason": {"type": "string"}, "missing_facts": {"type": "array", "items": {"type": "string"}},
+        },
+    }
     validator = Draft202012Validator(form["schema"])
     validator.validate(decision)
-    for expected in (DRAFT, REVIEW):
-        validator.validate(expected)
-    for invalid in ({"reply": {"decision": "draft"}}, {"reply": {**DRAFT["reply"], "reason": "extra"}},
-                    {"reply": {**REVIEW["reply"], "body": "must not send"}}, {**DRAFT, "extra": True}):
+    for invalid in ({"reply": {"decision": "draft", "body": "old"}}, {"decision": "draft"},
+                    {**DRAFT, "reason": False}, {**REVIEW, "extra": True}, {**REVIEW, "decision": "unknown"}):
         assert not validator.is_valid(invalid)
     request = json.loads(wire["messages"][0]["content"])
     assert request["request"] == scheduled.params["request_text"]
     assert request["context"]["source"]["id"] == scheduled.params["source_email_id"]
     assert {d["path"] for d in request["context"]["instructions"]} == {"procedures.md", "mail/alice@example.test.md"}
     assert request["context"]["correspondence"]["emails"]
-    assert paid_attempts() == [(result["reservation_ids"][0], True)]
     env.select("alice")
     again = asyncio.run(invoke(scheduled, recover_only=True))
-    assert again["operation_id"] == result["operation_id"] and again["state"] == result["state"]
-    assert len(scheduled.calls) == 1 and NativeMailbox.creates == 0
-    if decision == DRAFT:
-        assert result["state"] == "sent" and result["effect_certainty"] == "verified"
-        assert NativeMailbox.transmissions == 1
-        assert parsed(NativeMailbox.delivered[0]).get_content().strip() == DRAFT["reply"]["body"]
+    assert again == asyncio.run(invoke(scheduled)) == result
+    assert len(scheduled.calls) == 1
+    assert paid_attempts() == [(result["reservation_ids"][0], True)]
+    with db.get_session() as session:
+        assert session.query(LlmUsage.id, LlmUsage.input_tokens, LlmUsage.output_tokens).all() == [
+            (result["reservation_ids"][0], 32, 12)]
+    with db.get_engine().connect() as conn:
+        receipt_count = conn.exec_driver_sql("SELECT COUNT(*) FROM mailbox_operation_receipts").scalar_one()
+        saved = json.loads(conn.exec_driver_sql("SELECT result FROM operator_reply_operations").scalar_one())
+    assert NativeMailbox.updates == 0 and not NativeMailbox.trash
+    if decision["decision"] == "draft":
+        assert result["state"] == ("sent" if mode == "send" else "completed") and receipt_count == 1
+        assert NativeMailbox.transmissions == int(mode == "send") and NativeMailbox.creates == int(mode == "draft")
+        raw = NativeMailbox.delivered[0] if mode == "send" else next(iter(NativeMailbox.drafts.values()))["raw"]
+        assert parsed(raw).get_content().rstrip("\r\n") == decision["body"]
+        assert PRIVATE_REASON not in json.dumps(result) and PRIVATE_REASON not in json.dumps(saved)
     else:
-        expected = {key: decision["reply"][key] for key in ("reason", "missing_facts")}
-        assert result["state"] == "needs_review" and result["review"] == again["review"] == expected
-        assert asyncio.run(invoke(scheduled)) == result
-        assert NativeMailbox.transmissions == 0 and len(scheduled.calls) == 1
-        with db.get_engine().connect() as conn:
-            assert conn.exec_driver_sql("SELECT COUNT(*) FROM mailbox_operation_receipts").scalar_one() == 0
-            assert json.loads(conn.exec_driver_sql("SELECT result FROM operator_reply_operations").scalar_one()) == expected
-        assert paid_attempts() == [(result["reservation_ids"][0], True)]
+        expected = {key: decision[key] for key in ("reason", "missing_facts")}
+        assert result["state"] == "needs_review" and result["review"] == saved == expected
+        assert receipt_count == NativeMailbox.transmissions == NativeMailbox.creates == 0
 
 
+@pytest.mark.parametrize("mode", ["draft", "send"])
 @pytest.mark.parametrize("content,stop,status,cause", [
     ([{"type": "text", "text": "Private malformed output."}], "end_turn", 200, "structured_draft_required"),
-    ([{"type": "text", "text": '{"reply":{"decision":"needs_review","decision":"draft","body":"fixture"}}'}],
+    ([{"type": "text", "text": '{"decision":"draft"'}], "end_turn", 200, "structured_draft_required"),
+    ([{"type": "text", "text": '{"decision":"draft","body":"x","reason":"","missing_facts":[],"reason":""}'}],
      "end_turn", 200, "structured_draft_required"),
     ([], "end_turn", 200, "structured_draft_required"),
     ([text_block(DRAFT)], "max_tokens", 200, "incomplete_or_tool_generation_refused"),
     ([text_block(DRAFT), {"type": "thinking", "thinking": "Private thought", "signature": "fixture"}],
      "end_turn", 200, "incomplete_or_tool_generation_refused"),
-    ([text_block({"reply": {**DRAFT["reply"], "extra": "private"}})], "end_turn", 200, "structured_reply_decision_required"),
-    ([text_block({"reply": {**DRAFT["reply"], "body": "  "}})], "end_turn", 200, "bounded_plain_draft_body_required"),
+    ([text_block(DRAFT), {"type": "tool_use", "id": "call", "name": "send", "input": {}}],
+     "end_turn", 200, "incomplete_or_tool_generation_refused"),
+    ([text_block(DRAFT)], "refusal", 200, "incomplete_or_tool_generation_refused"),
+    ([{**text_block(DRAFT), "refusal": "provider refused"}], "end_turn", 200, "incomplete_or_tool_generation_refused"),
+    ([{"type": "text", "text": " " * 70001}], "end_turn", 200, "generation_response_too_large"),
     ([], "end_turn", 500, "reply_generation_provider_error"),
-], ids=["malformed", "duplicate-field", "empty", "truncated", "nontext", "extra-field", "blank-body", "provider-error"])
+], ids=["malformed", "partial", "duplicate", "empty", "truncated", "thinking", "tool", "refusal",
+        "text-block-refusal", "oversize-envelope", "provider-error"])
 def test_reopen_preserves_body_free_generation_failure_and_original_paid_attempt(
-        env, scheduled, monkeypatch, content, stop, status, cause):
+        env, scheduled, monkeypatch, mode, content, stop, status, cause):
+    scheduled.params["mode"] = mode
     scheduled.payload.update(content=content, stop_reason=stop)
     scheduled.status = status
     assert_generation_failure(env, scheduled, monkeypatch, cause)
 
 
+@pytest.mark.parametrize("mode", ["draft", "send"])
+@pytest.mark.parametrize("decision,cause", [
+    ({"reply": {"decision": "draft", "body": "old"}}, "structured_reply_decision_required"),
+    ([DRAFT], "structured_reply_decision_required"),
+    ({**DRAFT, "extra": False}, "structured_reply_decision_required"),
+    ({k: v for k, v in DRAFT.items() if k != "reason"}, "structured_reply_decision_required"),
+    ({**DRAFT, "decision": "unknown"}, "structured_reply_decision_required"),
+    ({**DRAFT, "decision": []}, "structured_reply_decision_required"),
+    ({**DRAFT, "missing_facts": ["Price"]}, "structured_reply_decision_required"),
+    ({**DRAFT, "missing_facts": {}}, "structured_reply_decision_required"),
+    ({**REVIEW, "body": "Must not send"}, "structured_reply_decision_required"),
+    ({**REVIEW, "body": " "}, "structured_reply_decision_required"),
+    ({**REVIEW, "body": None}, "structured_reply_decision_required"),
+    ({**DRAFT, "body": None}, "structured_reply_decision_required"),
+    ({**DRAFT, "body": "  "}, "bounded_plain_draft_body_required"),
+    ({**DRAFT, "body": "\ud800"}, "bounded_plain_draft_body_required"),
+    ({**DRAFT, "body": "é" * 32768 + "x"}, "bounded_plain_draft_body_required"),
+    ({**DRAFT, "reason": None}, "review_reason_not_string"),
+    ({**DRAFT, "reason": "  "}, "review_reason_blank"),
+    ({**DRAFT, "reason": "\ud800"}, "review_reason_invalid_utf8"),
+    ({**DRAFT, "reason": "é" * 2048 + "x"}, "review_reason_too_large"),
+], ids=["nested", "array", "extra", "missing", "unknown", "decision-type", "draft-with-facts", "draft-facts-type",
+        "review-with-body", "review-with-whitespace", "review-body-type", "draft-body-type", "draft-body-blank",
+        "draft-body-utf8", "draft-body-size", "draft-reason-type", "draft-reason-blank", "draft-reason-utf8",
+        "draft-reason-size"])
+def test_invalid_flat_decision_never_reaches_mailbox(env, scheduled, monkeypatch, mode, decision, cause):
+    scheduled.params["mode"] = mode
+    scheduled.payload["content"] = [text_block(decision)]
+    assert_generation_failure(env, scheduled, monkeypatch, cause)
+
+
+@pytest.mark.parametrize("mode", ["draft", "send"])
 @pytest.mark.parametrize("fields,cause", [
     ({"reason": None}, "review_reason_not_string"),
     ({"reason": " \t"}, "review_reason_blank"),
@@ -182,7 +255,8 @@ def test_reopen_preserves_body_free_generation_failure_and_original_paid_attempt
     ({"missing_facts": ["Private fact", "\udc00"]}, "review_fact_invalid_utf8"),
     ({"missing_facts": ["Private fact", "é" * 512 + "x"]}, "review_fact_too_large"),
 ])
-def test_invalid_review_identifies_the_field_and_constraint_after_reopen(env, scheduled, monkeypatch, fields, cause):
+def test_invalid_review_identifies_the_field_and_constraint_after_reopen(env, scheduled, monkeypatch, mode, fields, cause):
+    scheduled.params["mode"] = mode
     scheduled.payload["content"] = [text_block(review_decision(**fields))]
     assert_generation_failure(env, scheduled, monkeypatch, cause)
 
@@ -205,7 +279,24 @@ def assert_generation_failure(env, scheduled, monkeypatch, cause):
     with db.get_session() as session:
         usage = session.query(LlmUsage.id, LlmUsage.input_tokens, LlmUsage.output_tokens).all()
         assert usage == ([(reservation, 32, 12)] if scheduled.status == 200 else [])
-    assert NativeMailbox.transmissions == NativeMailbox.creates == 0
+    assert NativeMailbox.transmissions == NativeMailbox.creates == NativeMailbox.updates == 0
+    assert not NativeMailbox.trash and not NativeMailbox.drafts and not NativeMailbox.delivered
+
+
+@pytest.mark.parametrize("facts", [[], ["Confirmed terms"]])
+def test_reopen_preserves_pre_dev16_terminal_review(env, scheduled, monkeypatch, facts):
+    scheduled.payload["content"] = [text_block(REVIEW)]
+    first = asyncio.run(invoke(scheduled))
+    historical = {"reason": "Supervisor must approve.", "missing_facts": facts}
+    with db.get_engine().begin() as conn:
+        conn.exec_driver_sql("UPDATE operator_reply_operations SET result=? WHERE id=?",
+                             (json.dumps(historical), first["operation_id"]))
+    env.select("alice")
+    monkeypatch.setattr(NativeMailbox, "__init__", lambda *args: pytest.fail("legacy recovery opened provider"))
+    expected = {**first, "review": historical}
+    assert asyncio.run(invoke(scheduled)) == asyncio.run(invoke(scheduled, recover_only=True)) == expected
+    assert len(scheduled.calls) == 1 and paid_attempts() == [(first["reservation_ids"][0], True)]
+    assert NativeMailbox.transmissions == NativeMailbox.creates == NativeMailbox.updates == 0
 
 
 def test_reopen_preserves_dev14_generic_review_failure(env, scheduled, monkeypatch):
