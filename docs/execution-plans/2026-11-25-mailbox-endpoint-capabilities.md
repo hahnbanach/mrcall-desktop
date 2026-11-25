@@ -140,8 +140,12 @@ postpublication review is
 `/tmp/mrcall-ai-kit/mailbox-model-data-publication-review-20261125/postpublication/`;
 both runtime/quote packets are under
 `/tmp/mrcall-ai-kit/gateway-structured-output-release-preparation-20261125/`.
-All seven hosted engines are verified on dev14 from `74f15a13`. Final component
-documentation closure, the active corrected ordinary support result, public
-kernel/installer provenance, literal Gmail web and parent final review remain
-open. The completed parent installed checks retain their own evidence.
+All seven hosted engines are verified on dev14 from `74f15a13`. The corrected
+ordinary support run `run-v3wrbl3l` has one received/Sent reply, zero drafts and
+unchanged identities/accounting after same-key replay. The lead approves the
+actual reference and sum 416. Exact recurring controls and process bindings are
+restored. Its actual receipt is
+`/home/mal/.local/share/mrcall-operational-evidence/2026-11-24/mrcall-ordinary-dev14-20261125/live-result.json`.
+Component final documentation closure remains required. The parent HB plan owns
+its remaining client, public-provenance and final installed acceptance.
 No broader M10 or paid billing acceptance is claimed.

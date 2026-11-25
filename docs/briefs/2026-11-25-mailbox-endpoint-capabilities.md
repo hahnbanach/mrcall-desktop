@@ -6,8 +6,8 @@ The HB November 23 mailbox draft plan governs the product delivery. The approved
 Agent brief `2026-11-25-mailbox-structured-output` requires bounded structured
 generation on the existing direct, Messages and pinned Chat transports.
 
-The published snapshot retains only the intersection of admitted endpoints'
-parameters. That cannot establish a separately pinned endpoint's capabilities.
+At this brief's initial data baseline, the published snapshot retains only
+the intersection of admitted endpoints' parameters. That cannot establish a separately pinned endpoint's capabilities.
 The current public DigitalOcean endpoint advertises structured output and response
 format support, while the published model-wide intersection does not. The gateway
 must not turn that global false value into a hardcoded exception. It needs exact

@@ -1,6 +1,6 @@
 ---
-doc_baseline_commit: c4593726f69199f15f36a317216893efe4bf3927
-doc_baseline_date: 2026-10-16
+doc_baseline_commit: 9719b6b9567b031e7cd1e85afec217cf757e1dce
+doc_baseline_date: 2026-11-25
 ---
 
 # Active Context — Isolated model metadata publisher
@@ -17,10 +17,8 @@ in active-context-archive.md.
 This branch extends the existing model-table publisher from `652c0007` for the
 [mailbox endpoint-capability dependency](execution-plans/2026-11-25-mailbox-endpoint-capabilities.md).
 It is neither an installed engine nor a replacement for the hosted mailbox line.
-All seven actual engines run immutable dev14 from `74f15a13`, independently
-verified after the release-only switch. Both normal operators retain local
-kernel v0.76.1 and paused schedules. HB's November 23 plan owns installed release
-and acceptance. The October base snapshot is retained verbatim as history.
+HB's November 23 plan owns installed engine versions, normal clone pins,
+recurring controls, release and acceptance. The October base snapshot is retained verbatim as history.
 
 Publisher and gateway M1 revision 2 are approved. The producer retains exact
 optional endpoint parameters without changing global intersection, reference
@@ -44,25 +42,22 @@ inference or credit debit. [Published contract](../engine/zylch/llm/roles/contra
 
 ## Unresolved
 
-- Final scoped documentation and component closure remain open. The actual
-  source/data/reader gates have their retained independent approval and execution
-  evidence. These results establish no paid inference or credit settlement.
-  Existing uncertain records remain fenced.
+- Actual source/data/reader gates retain their independent approval and execution
+  evidence. Paid inference and credit settlement retain their separate acceptance
+  owners. Existing uncertain records remain fenced.
 - The active gateway keeps its image-build snapshot as a fallback. Its actual
   authenticated quotes, rather than that build file, prove the serving version.
   Old readers must not be reinstated against incompatible data without the
   reviewed recovery procedure.
-- The ordinary support reply, public kernel provenance,
-  Gmail client interaction and the parent delivery's other installed obligations
-  remain separate and open. Historical M10 and unrelated runtime work stay under
-  their existing plans; this publisher branch does not certify their deployment.
+- The parent HB plan owns mailbox behavior, ordinary operators, Gmail client
+  interaction, public kernel/installer provenance and final installed acceptance.
+  Historical M10 and unrelated runtime work retain their existing plans.
 
 ## Next
 
-1. Finish documentation and component closure from the actual publication,
-   public bytes, deployed readers and authenticated quote receipts.
-2. Preserve the verified hosted dev14 activation and return the remaining
-   ordinary support, public kernel, Gmail client and final-review obligations
-   to the parent mailbox delivery.
+1. Preserve canonical requirements, reviewed snapshot bytes and reader
+   compatibility for each explicit free refresh on this isolated source line.
+2. Continue parent installed delivery under HB's mailbox plan, retaining the
+   public publication and compatible-reader evidence.
 3. Keep future refreshes free-only unless their separate paid workflow is
    explicitly invoked under its existing spending policy.
