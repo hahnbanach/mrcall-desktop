@@ -3798,7 +3798,7 @@
     },
     {
       "file": "cs/campaign.py",
-      "line": 722,
+      "line": 729,
       "callee": "rpc.call_sync",
       "method": "campaign.update_contact",
       "method_expression": "'campaign.update_contact'",
@@ -3811,7 +3811,7 @@
     },
     {
       "file": "cs/campaign.py",
-      "line": 728,
+      "line": 735,
       "callee": "rpc.call_sync",
       "method": "campaign.update_contact",
       "method_expression": "'campaign.update_contact'",
@@ -3824,7 +3824,7 @@
     },
     {
       "file": "cs/campaign.py",
-      "line": 828,
+      "line": 835,
       "callee": "rpc.call_sync",
       "method": "campaign.update_contact",
       "method_expression": "'campaign.update_contact'",
@@ -3838,7 +3838,7 @@
     },
     {
       "file": "cs/campaign.py",
-      "line": 886,
+      "line": 893,
       "callee": "rpc.call_sync",
       "method": "campaign.update_contact",
       "method_expression": "'campaign.update_contact'",
@@ -4003,7 +4003,7 @@
     },
     {
       "file": "cs/contextual_email.py",
-      "line": 20,
+      "line": 37,
       "callee": "rpc.call_sync",
       "method": "system.capabilities",
       "method_expression": "'system.capabilities'",
@@ -4013,7 +4013,7 @@
     },
     {
       "file": "cs/contextual_email.py",
-      "line": 23,
+      "line": 40,
       "callee": "rpc.call_sync",
       "method": "drafts.get",
       "method_expression": "'drafts.get'",
@@ -4025,7 +4025,7 @@
     },
     {
       "file": "cs/contextual_email.py",
-      "line": 47,
+      "line": 64,
       "callee": "rpc.call_sync",
       "method": null,
       "method_expression": "method",

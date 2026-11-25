@@ -42,9 +42,14 @@ sent_lookup=read_exact_sent)`:
    native message identity and labels. It must not generate mail, create a
    draft, send, delete, move or append anything.
 5. Review a fresh preview and pass its exact digest. A change to legacy rows,
-   receipt state or the archive records used to identify a reply source
-   invalidates the preview. Provider receipts are installed before the
-   single atomic transaction that imports send identities and discards rows.
+   canonical receipt rows or the archive records used to identify a reply source
+   invalidates the preview. The digest does not include
+   `mailbox_operation_request_aliases`. Apply independently checks the shared
+   request-key namespace inside its transaction: an alias colliding with an
+   imported legacy key refuses with `legacy_receipt_identity_conflict`, while
+   an independent alias is preserved. Only the receipt schema is created before
+   the transaction. Receipt rows are imported in the same atomic transaction
+   that discards the legacy rows.
 
 The transaction imports each old send journal entry under
 `request_key = "legacy-send:" + old_operation_id`, with kind `send`, target
@@ -68,9 +73,10 @@ payload digest retains the original escaped source. The claimed outgoing
 Message-ID stays exactly as stored. A standalone send retains its empty
 reply source and its own outgoing identity.
 
-Exactly one matching provider Sent record, with the claimed RFC Message-ID and
-mailbox sender, establishes completion. Missing, ambiguous, malformed or
-unavailable Sent remains unconfirmed. An unknown legacy Message-ID stays empty
+During migration and repeated migration, exactly one matching provider Sent
+record, with the claimed RFC Message-ID and mailbox sender, establishes
+completion. Missing, ambiguous, malformed or unavailable Sent remains
+unconfirmed. An unknown legacy Message-ID stays empty
 and fenced; the migration never invents a replacement identity. A locally
 `sent` draft or `completed` journal is insufficient. Repeating the migration
 preserves an existing uncertain receipt and its evidence until exact Sent proof
@@ -79,11 +85,13 @@ occurred, even when the retained old journal says `reserved` or `inventoried`. A
 journal remains not dispatched unless provider Sent proves otherwise.
 
 The new engine checks imported, unresolved legacy receipts by mailbox and exact
-RFC source before preparing or sending a reply. Repeating an old request resumes
-Sent reconciliation. It cannot invoke a transport or reconstruct an internal
-draft. Confirmed old Sent membership is represented by the new receipts after
-all legacy draft rows have gone. Every old provider-journal row remains unchanged
-as recovery evidence.
+RFC source before preparing or sending a reply. Ordinary recovery of an
+imported send receipt checks for one unique exact Message-ID in provider Sent.
+The migration's sender and raw-MIME proof decoder applies during migration.
+Repeating an old request performs read-only Sent reconciliation and cannot
+reconstruct an internal draft. The new receipts retain confirmed old Sent
+membership after legacy draft rows are removed. Every old provider-journal
+row remains unchanged as recovery evidence.
 
 Generated snapshots in `operator_reply_operations.result` become an immutable
 `legacy_draft_id`, snapshot hash, body hash and `status: "discarded"`. The
@@ -94,10 +102,15 @@ and instruction provenance are not generated editable drafts and remain intact.
 ## Compatible rollback
 
 Pause writers before any rollback and preserve the complete profile database,
-including new send receipts and old provider journals. A compatible release
-retains the mailbox receipt schema and uses read-only Sent recovery for uncertain
-sends. It neither restores discarded draft rows nor repeats a possible dispatch.
-Keep the candidate available until that reader/writer compatibility is verified.
+including canonical send receipts, `mailbox_operation_request_aliases` and old
+provider journals. A compatible release retains both receipt tables, resolves
+every accepted secondary request key to its original canonical operation and
+uses read-only Sent recovery for uncertain sends. It neither restores discarded
+draft rows nor repeats a possible dispatch. Dev12 cannot read these aliases and
+is incompatible once an alias is accepted. Keep dev13 or an alias-aware forward
+release available until reader/writer compatibility is verified by reopening
+the database and replaying both the original key and an accepted alias without
+another transmission.
 
 `rollback_check(writer_fence=assert_stopped)` refuses an old writer whenever the
 legacy journal is nonempty or unknown, any mailbox operation receipt exists, or

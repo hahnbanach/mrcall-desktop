@@ -29,10 +29,11 @@ materialises) `app/docs/harness-backlog.md`.
 - [ ] **The RPC contract check ignores result shapes and inventory currency.**
   Discovered: 2026-10-09. `npm run test:rpc-contracts` passed while the client
   types still declared two removed Qonto result fields as required. Nothing
-  fails when `docs/rpc-contract-inventory.json` is stale. `rpc-contracts.yml`
-  pins cs-kernel `ba79cc13`, which yields 54 kernel calls; the committed
-  inventory lists 64 and reproduces only from kernel `eb6dc1a`, a revision the
-  file does not record.
+  fails when `docs/rpc-contract-inventory.json` is stale. The current local
+  inventory checks 170 engine methods, 92 preload calls, 120 renderer methods
+  and 91 kernel call candidates, with 44 unresolved. The reproducible source
+  ref is recorded in the [IPC contract](ipc-contract.md#parameter-contract--what-the-dispatcher-refuses).
+  `rpc-contracts.yml` checks its own cs-kernel pin, `ba79cc13`.
   Recommendation: compare declared client result fields with engine results
   for the methods that have fixtures, regenerate the inventory in the workflow
   and fail on a diff, and record one kernel revision for both.
@@ -140,18 +141,17 @@ materialises) `app/docs/harness-backlog.md`.
   `auth.currentUser`) and the "no identity at all" state in legacy
   windows post-rollback (2026-05-12). Both were caught only by Mario
   manually opening two BrowserWindows and visually checking the
-  IdentityBanner. With per-window `inMemoryPersistence` and
-  UID-keyed bindProfile, the invariant is "one window = one signin =
-  one profile dir, never bleeds, never null on the signed-in side" —
-  but nothing automated enforces this. A regression here is silent
-  and security-relevant (wrong account seeing wrong data).
+  IdentityBanner. The current renderer uses refresh-only IndexedDB in
+  partitioned Chromium and binds profiles by UID. The focused
+  `app/scripts/test-auth-persistence.mjs` tests separate partitions and
+  identity restoration after a full Chromium restart using synthetic provider
+  responses. Full multi-window Electron sign-in, navigation and binding
+  remain untested together.
   Recommendation: a Playwright/Spectron Electron integration test
   that boots the app, signs in as user A in window 1, opens a second
   window via "Other profiles" → user B, signs in as user B, and
   asserts that each window's `IdentityBanner` shows the right
-  identity AND that `profile.current()` returns the matching dir id.
-  Today the closest thing we have is `npm run typecheck`, which
-  catches signature drift but not semantic identity invariants.
+  identity and that `profile.current()` returns the matching directory ID.
 
 - [ ] **No CI gate prevents committing the OAuth Client secret.**
   Discovered: 2026-05-02
@@ -170,7 +170,7 @@ materialises) `app/docs/harness-backlog.md`.
   Owner: Desktop/kernel contract tooling. The 2026-10-07 inventory and CI check
   parameter names and TypeScript argument/declared-return assignability. Engine
   value/return validation has no shared schema; `any`/`unknown` may mask drift.
-  Twelve current kernel call sites have computed method names or variable payloads,
+  Forty-four of 91 current kernel call candidates have computed method names or variable payloads,
   and aliases outside the AST candidate names are not resolved. Extending this
   requires reviewed schema/dataflow coverage; the bounded hardening umbrella
   does not assert it complete. Inventory: `docs/rpc-contract-inventory.json`.
@@ -207,6 +207,8 @@ split indexes.**
 
 | doc | lines at review | verdict | date |
 |---|---|---|---|
+| docs/execution-plans/2026-11-20-main-is-the-hosted-line.md | 492 | keep whole — one hosted-line delivery and compatible recovery contract, read by milestone | 2026-11-24 |
+| docs/execution-plans/2026-11-18-engine-owned-mail-sync.md | 429 | keep whole — one engine mail-sync delivery contract and acceptance, read by milestone | 2026-11-24 |
 | docs/ipc-contract.md | 1218 | keep whole — it is the method index, retrieved by traversal; splitting it buys more reads, not fewer | 2026-08-26 |
 | docs/execution-plans/proactive-task-open.md | 575 | keep whole — one workstream's argument, read end to end | 2026-08-26 |
 | docs/execution-plans/cross-machine-transport.md | 428 | keep whole — one workstream's argument, read end to end | 2026-08-26 |

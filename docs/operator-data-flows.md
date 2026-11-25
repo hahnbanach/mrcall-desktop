@@ -72,7 +72,8 @@ causal receipt, without a saved editable body. The final provider effect checks
 current instruction revisions under the company writer guard after reserving
 its durable operation identity. Recovery resolves the original operation without
 another generation or blind provider retry. Internal review can finish without
-a customer draft. The candidate is not installed on the dev7 fleet.
+a customer draft. The mailbox implementation runs on the seven hosted engines; current installed
+versions and remaining acceptance are in the living context and delivery plan.
 
 `send_reply` is the one MCP sending tool. It needs full operator access
 (`operator.use`) and is idempotent on its request key. The server exposes a

@@ -1,11 +1,10 @@
-# Fixed operator MCP source build
+# Retained dev1 operator MCP source build
 
-This is the retained dev1 paired-build recipe. It does not describe the installed
-dev7 payload or build the [mailbox draft candidate](mailbox-drafts.md). The fixed
-manifest below excludes the new mailbox modules. The mailbox delivery must use a
-new reviewed complete hosted package and retain its own source and build evidence.
+This recipe reproduces the fixed November 2026 dev1 paired source build.
+The [mailbox delivery plan](execution-plans/2026-11-23-mailbox-drafts.md) owns the
+installed mailbox package and its source and build evidence.
 
-The candidate packages the current-main engine and an explicitly reviewed kernel
+The retained build packages its fixed engine source and an explicitly reviewed kernel
 MCP helper slice. Desktop remains the configurator. This build does not establish
 standalone dependency installation, GUI behavior, provider acceptance, full kernel
 CLI compatibility or adoption of kernel exact-send/publication capabilities.
@@ -80,18 +79,15 @@ The extracted pair has 373 engine and 136 kernel package paths and 242 audited
 namespace modules. All four native contextual guard hashes match the selected
 main base. Ordinary core/RPC/WebSocket imports pass with MCP unavailable.
 
-The composed checks retain 171 protocol tests (two skips), 63 function-based engine
-cases and 32 kernel helper tests (one skip). The initial 21 pytest setup errors come
-from an obsolete parent Supabase fixture; explicit scoped fixture loading repairs
-that harness and the affected 10 memory/11 project cases pass. Other passed cases
-are not repeated. The actual SDK/native guarded flow uses signed assignment and
-closure, later inbound, draft/recovery/idempotence, payload conflict and revocation.
-A final combined run of the three guarded/SDK modules from the actual Git export
-passes 42 cases under the repaired loader; its 274 module origin audit is retained at
+The composed checks cover 171 protocol tests (two skips), 63 function-based engine
+cases and 32 kernel helper tests (one skip). The actual SDK/native guarded flow
+exercises signed assignment and closure, later inbound, draft recovery and
+idempotence, payload conflict and revocation. The scoped fixture loader runs the
+three guarded/SDK modules together from the Git export. The retained run passes
+42 cases, with a 274-module origin audit at
 `m3/committed-guarded-collection/check-report.json`. Unchanged protocol, memory/
-project and kernel checks retain their earlier exact-byte evidence. Controlled
-model, authority-provider and mailbox protocol fixtures establish source contracts;
-they do not establish new native-client or live provider acceptance.
+project and kernel checks retain their earlier exact-byte evidence. Model,
+authority-provider and mailbox protocol coverage uses controlled fixtures.
 
 Source/build/check evidence is under the integration plan's evidence root:
 `m1-review.md`, `m2-review.md`, `m3/handoff.json`,

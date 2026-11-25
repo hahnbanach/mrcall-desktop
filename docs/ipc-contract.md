@@ -10,8 +10,8 @@ description: |
 
 # IPC Contract — Engine ↔ App
 
-The assembled registry is the authority. The mailbox draft candidate below is
-source-only relative to the installed dev7 fleet. Its new methods supersede the
+The assembled registry is the authority. The mailbox draft methods below are
+installed on the seven hosted engines. They supersede the
 private-row draft surface; retired publication/exact-pair methods refuse instead
 of recreating a private copy. The historical index remains dated and partial.
 The separately unreleased contextual-email fields described below must be checked
@@ -67,12 +67,11 @@ fixture acceptance does not establish deployed-client support.
 `system.capabilities` additionally returns `contextual_email_policy: 1` in the
 local candidate. This capability covers source-bound draft creation/update and
 final engine transport admission; `assignment_draft_policy: 1` alone does not.
-It does not certify external/manual mailbox writes. The installed kernel
-review append remains outside the engine/company lock. The mailbox candidate
-removes that append and delegates draft effects to the engine; it does not
-activate contextual-email enrollment.
-Published Desktop `v0.1.56` and the current hosted release retain the old scoped
-contract until a separately authorized rollout.
+The installed mailbox candidate keeps scoped assignment admission. Installed
+kernel `v0.76.1` delegates reply composition and draft effects to the engine
+through `drafts.compose_reply`. Contextual-email enrollment remains unreleased.
+See the [mailbox delivery plan](execution-plans/2026-11-23-mailbox-drafts.md)
+for the installed engine and clone identities.
 
 `chat.send` accepts optional `email_context` plus
 `contextual_email_policy_version=1`. The context is a nonempty object with one or
@@ -97,13 +96,9 @@ The mailbox candidate reserves operation identity before checking current compan
 authority under the writer guard for the provider effect. Current native MIME
 provides the editable draft state; old private rows cannot authorize sending. Enrollment and source-free semantic limits are in the
 [assignment contract](../engine/docs/features/task-assignment.md#contextual-email-enforcement--unreleased-development).
-The source-level [RPC inventory](rpc-contract-inventory.json) records registration
-and declared signatures. The engine, preload, renderer and current kernel-call
-sections are regenerated for the mailbox candidate, including draft and Gmail
-methods. The inventory is static analysis: dynamic calls and unresolved Python
-aliases/dataflow remain explicit limits. It does not establish runtime, provider
-or installed-client compatibility. The current `METHODS` registry remains the
-engine authority.
+The source-level [RPC inventory](rpc-contract-inventory.json) records the
+registry signatures and the checked preload, renderer and kernel call sites.
+Its generation command and coverage limits are below.
 
 ## Transports
 
@@ -207,10 +202,13 @@ checks, app typecheck and `npm run test:rpc-contracts` on relevant pushes/PRs.
 The latter uses the TypeScript checker to compare preload payload keys with
 engine accepted/required names and renderer arguments/declared returns with
 preload declarations. `npm run inventory:rpc` regenerates
-[rpc-contract-inventory.json](rpc-contract-inventory.json); both commands accept
-`ENGINE_PYTHON` and `CS_KERNEL_ROOT`. The inventory records dynamic kernel call
-sites and extraction limits. This is not shared runtime value/return validation:
-`any`/`unknown` and Python aliases/dataflow remain explicit coverage limits.
+[rpc-contract-inventory.json](rpc-contract-inventory.json). Both commands accept
+`ENGINE_PYTHON` and `CS_KERNEL_ROOT`. The current local inventory uses a clean
+Git export of cs-kernel `v0.76.1` at
+`6b5fa007c8c0fa98c0d5f5a05a76052eea3f3d0f` for `CS_KERNEL_ROOT`.
+The inventory records dynamic kernel call sites and extraction limits.
+Shared runtime value and return validation remains outside this check, along
+with unresolved Python aliases/dataflow and values covered by `any`/`unknown`.
 Local task transport checks exercise subprocess stdin/stdout and the production
 WebSocket handler with fixture claims; they do not verify Firebase handshake,
 CLI initialization, packaged sidecars or deployed profiles.
@@ -795,24 +793,31 @@ no transport, spend cap, malformed answer, a verdict missing for one index —
 resolves to `needs_reply: true`. Nothing in this method can produce silence
 by breaking.
 
-### Mailbox draft methods — candidate
+### Mailbox draft methods
 
 `system.capabilities` exposes `mailbox_drafts: 1` and `mailbox_reply: 1`.
 The [mailbox contract](mailbox-drafts.md) owns identity, MIME limits and certainty.
-All draft identifiers are opaque mailbox-bound native Gmail handles. These methods
-use current Gmail state and never insert an editable engine draft row.
+All draft identifiers are opaque handles bound to the primary IMAP mailbox. These methods
+use current mailbox state and never insert an editable engine draft row.
 
 | Method | Parameters | Result |
 |---|---|---|
-| `drafts.list` | `status?, mailbox_id?` | Complete bare array of current native drafts. Only `status=draft` is listed. A provider failure raises a named application error, never an empty success. |
+| `drafts.list` | `status?, mailbox_id?` | Complete bare array of current native drafts. Only `status=draft` is listed. An inventory failure returns JSON-RPC error `-32030` with a safe cause. |
 | `drafts.get` | `draft_id` | `{ok, draft, cause, draft_id}`; missing native container gives `draft_not_found`. |
 | `drafts.create` | `to, subject, body, request_key, cc?, bcc?, in_reply_to?, references?, thread_id?, body_format?, source_id?` | Current native draft or durable operation outcome. |
-| `drafts.update` | `draft_id, request_key?, to?, cc?, bcc?, subject?, body?, body_format?` | `{ok, draft, draft_id}` or named refusal. Only supplied fields change. |
+| `drafts.update` | `draft_id, request_key?, to?, cc?, bcc?, subject?, body?, body_format?` | `{ok, draft, draft_id}` or named refusal. The top-level `draft_id` echoes the old input handle. The replacement handle is `draft.id`. Only supplied fields change. |
 | `drafts.send_status` | `draft_id, request_key` | Existing operation plus exact Sent lookup only. Missing operation returns `named_send_operation_not_found` without a reservation, draft read or transmission. |
 | `drafts.send` | `draft_id, request_key` | Sent-confirmed delivery or unconfirmed/refused outcome. Current native MIME and recipients are used. |
 | `drafts.trash` | `draft_id, request_key` | Confirmed recoverable Trash outcome or named uncertainty/refusal. |
 | `drafts.discard` | `draft_id, request_key?` | Compatibility alias for native Trash, including `discarded`. It never deletes a private row. |
 | `drafts.compose_reply` | `source_email_id, thread_key, request_key, mode?, request_text?, instruction_versions?, operator_origin?, operator_origin_version?, recover_only?` | Durable reply operation outcome; `mode=draft` prepares a native draft, `mode=send` sends directly without creating one. |
+
+Get and mutation handlers return a safe refusal or receipt result for mailbox
+service failures. The [send and replay contract](mailbox-drafts.md#sending-and-replay)
+describes the installed dev13 alias binding. Recovery and status return the
+canonical operation, Message-ID and original request key. Status reads the
+mailbox without mutating it. MCP refuses an unbound key on an already retired
+handle before creating any binding.
 
 Compose requires an exact owner-scoped source. `mode=send` requires scheduled
 origin; interactive sending names an existing draft through `drafts.send`.
@@ -826,18 +831,15 @@ An uncertain dispatch only checks Sent, including after process restart. Empty o
 failed reads never authorize another transmission. Attachments are visible and
 trashable, but send refuses them. Multipart body edits require Gmail.
 
-### Gmail authorization — candidate
+### Mailbox authentication
 
-These calls require the authenticated selected profile and store separate encrypted
-Gmail credentials. Calendar consent and IMAP app passwords do not grant Gmail API
-access. OAuth client configuration is host-owned; no secret is returned.
-
-| Method | Parameters | Result |
-|---|---|---|
-| `google.gmail.begin` | `redirect_uri?` | `{auth_url, state, redirect_uri, expires_in}` for a bounded PKCE consent flow. |
-| `google.gmail.complete` | `code, state` | `{ok, email, scope}` after exact mailbox/profile validation. |
-| `google.gmail.status` | none | `{connected, email?, scope?, reason?}`. |
-| `google.gmail.disconnect` | none | `{ok}` after removing the selected Gmail credential. |
+Draft operations use the selected profile's existing primary IMAP and SMTP
+connection with its app password from `EMAIL_PASSWORD`. The engine creates a
+dedicated authenticated IMAP connection for each facade and reads current
+capabilities after login.
+Draft RPCs neither accept nor return mailbox credentials. No `google.gmail.*` OAuth
+method is registered. Firebase identity and the separate Calendar OAuth retain
+their own contracts. See [mailbox drafts](mailbox-drafts.md).
 
 ### `llm.models(provider?)`
 
@@ -1409,42 +1411,32 @@ remote action and then record it locally — `emails.archive` IMAP-MOVEs
 before it sets the local flag, `whatsapp.send_message` sends before it
 stores the message — so those are allowed to finish.
 
-What a cancelled turn guarantees:
-
-- It starts no further tool call, and it never returns to the LLM.
-- A tool that had not started does not start. A tool already running in
-  the engine's worker pool (the IMAP-, SMTP- and subprocess-backed ones)
-  runs to completion — a thread cannot be interrupted — so its side
-  effect and its bookkeeping both land, or neither does. There is no
-  half-finished tool.
+- Cancellation prevents further tool calls and another LLM turn.
+- A tool already running in the engine's worker pool (including IMAP,
+  SMTP and subprocess-backed work) can continue when the awaiting handler
+  is cancelled. Provider effects and local bookkeeping are separate steps.
+  An acknowledgement loss or process failure can leave the outcome
+  uncertain between them. For native mailbox effects, surface the exact
+  operation receipt and recover with its request key before any retry.
 - A tool that spends its time on `await` is interrupted there, and what
   that means depends on what the await was covering:
   - `compose_email` is the case this design exists for. Its draft is
     written *after* the LLM returns, so a turn cancelled while the model
     is composing writes **no draft**. `web_search` is read-only and
     leaves nothing behind either way.
-  - `send_sms` is **not** stopped. Its await covers a thread
-    (`run_in_executor`), so the HTTP call to the SMS proxy completes and
-    **the message is delivered** — only the result is lost, and the
-    credits are spent.
+  - `send_sms` awaits a thread (`run_in_executor`). The HTTP call to the
+    SMS proxy can finish while the disconnected client receives no result.
   - An outbound MrCall call is left **indeterminate**. Its await is the
     HTTP POST itself, so a cancel aborts the request mid-flight: the
     call may or may not have been placed, and either way the engine
     records nothing about it.
 
-So the honest summary is not "nothing happened". It is: nothing new
-started, an already-running blocking tool may have finished, an SMS
-already in flight was delivered, and an outbound call already in flight
-has an unknown outcome.
-
 The client-visible consequence is on **reconnect**. The desktop app
 reconnects automatically and its approval card survives the drop, but
 the turn behind that card does not. Answering it with `chat.approve`
-after a reconnect gets `-32602` with a message saying the turn is gone
-and nothing was sent; the request has to be made again. This is the
-intended outcome — an approval must not reach a turn no client is
-listening to — and the message is written for the operator to read, not
-just for a log.
+after a reconnect gets `-32602` because the pending approval is gone.
+Check the receipt of any effect already started before requesting a
+fresh approval.
 
 ### `google.calendar.connect()` / `.status()` / `.disconnect()` / `.cancel()`
 
@@ -1622,16 +1614,17 @@ the field descriptors, no values.
 
 ### `campaign.*`
 
-Durable contact and campaign metadata for operator-driven outreach. None of these
-methods sends mail. Supplying non-null string `draft_subject` or `draft_body` to
-`campaign.add_contact` or `campaign.update_contact` in the mailbox candidate
-prepares or edits the native Gmail draft through the engine. These requests require
-a stable `draft_request_key` of 16–128 characters. `draft_body_format` accepts
-`plain` or `html`; `draft_cc` accepts an address list, preserving fixed-template
-pack MIME and copy recipients through the same producer. A new contact draft is created
-once; an existing native handle updates only the explicitly supplied fields.
-A replay recovers before updating, preserving later Gmail edits. A missing named
-container is never recreated. Null draft fields are housekeeping, not Gmail edits.
+These methods manage outreach metadata and prepare drafts. Sending a campaign
+draft uses `drafts.send`. A non-null
+`draft_subject`, `draft_body`, `draft_body_format` or `draft_cc` on
+`campaign.add_contact` or `campaign.update_contact` requests a native mailbox
+draft mutation, even when format or Cc is the only draft field supplied. These
+requests require a stable `draft_request_key` of 16–128 characters. Subject and
+body are strings. Format accepts `plain` or `html`, and `draft_cc` accepts an
+address list. The engine creates a contact's first draft or patches only the
+supplied fields of its exact named native draft. A replay recovers before
+updating and preserves later Gmail edits. A missing named draft is never
+recreated. Null draft fields only affect internal housekeeping.
 
 `draft_subject` and `draft_body` remain null in stored contacts. Engine-owned
 `dossier.mailbox_draft_id` holds the opaque native handle and

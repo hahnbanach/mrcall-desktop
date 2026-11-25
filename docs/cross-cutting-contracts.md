@@ -18,6 +18,12 @@ optional Firebase refresh token is persisted for headless renewal through
 `utils/encryption.py`: Fernet when a key is configured, with local no-key
 plaintext passthrough. Hosted startup requires an environment encryption key.
 ID tokens and refresh tokens have different persistence contracts.
+The renderer uses the official SDK with `refreshOnlyPersistence.ts`: IndexedDB
+retains the refresh credential and required account metadata, excluding cached
+ID/access tokens. Reading a legacy account row removes those token fields in an
+atomic transaction. SDK restoration obtains a fresh ID token; main and per-window
+engine sessions keep it in memory. Explicit logout removes the durable account
+and invalidates late refresh results.
 
 Profiles created post-Firebase are keyed by the immutable Firebase
 UID (`~/.zylch/profiles/<firebase_uid>/`), not the email — emails can
@@ -39,11 +45,9 @@ configured: `GOOGLE_CALENDAR_CLIENT_SECRET` overrides the build-time
 `GOOGLE_CALENDAR_CLIENT_SECRET_DEFAULT`. Connection refuses when no client ID
 is available.
 
-The legacy CLI MrCall PKCE flow on `:19274` (`zylch init`) was **removed
-2026-05** — MrCall connection today happens exclusively via the Firebase
-sign-in in the desktop UI (`tools/mrcall/starchat_firebase.py`); `zylch init`
-no longer runs any OAuth/PKCE code for MrCall (corrected 2026-07-14,
-doc-critic pass).
+MrCall's StarChat client (`tools/mrcall/starchat_firebase.py`) uses Firebase
+identity from the Desktop sign-in. Google Calendar uses the separate read-only
+grant above.
 
 ## Shared company memory (since 2026-09)
 

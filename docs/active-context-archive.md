@@ -1,3 +1,740 @@
+## 2026-11-25 — Before installed dev13 and ordinary-run reconciliation
+
+````markdown
+---
+doc_baseline_commit: f937091a1ab3834f17e60479d567e68b3b0ca49e
+doc_baseline_date: 2026-11-22
+---
+
+# Active Context — Cross-cutting
+
+<!-- doc-scope:start -->
+Scope: the cross-cutting volatile state of mrcall-desktop — what spans
+engine ↔ app or describes the repo as a whole (the JSON-RPC contract, the
+release pipeline, the brand rename, monorepo conventions). Engine-only state
+lives in [`../engine/docs/active-context.md`](../engine/docs/active-context.md),
+app-only state in [`../app/docs/active-context.md`](../app/docs/active-context.md),
+durable cross-cutting facts in [`../AGENTS.md`](../AGENTS.md) and the documents
+[`README.md`](README.md) routes to, pruned narrative in
+[`active-context-archive.md`](active-context-archive.md). A living snapshot of
+what is *current*, targeting ≤ ~120 lines.
+<!-- doc-scope:end -->
+
+## State now
+
+All seven hosted engines run the same immutable dev12 release from source
+`a4b03ad5`. Actual process identities, arguments, listening sockets and all 492
+package files match. Both normal operator clones use the exact local v0.76.1
+artifact. Recurring schedules stay paused outside bounded acceptance windows. Café Production
+is the routed operator MCP profile.
+
+The [mailbox implementation](mailbox-drafts.md) uses existing primary IMAP/SMTP
+app passwords. The engine owns the current mailbox draft, SMTP transmission and
+exact Sent confirmation. Durable operation identities prevent retransmission
+across caller retries and actual process restarts. Strict singleton full-MIME
+source headers are normalized; ambiguous sources remain held. The
+[migration contract](mailbox-draft-migration.md) retains original send fences and
+compatible recovery without restoring discarded internal text. All seven actual
+databases have completed internal draft retirement with zero provider mutations.
+
+Installed packaged Linux Desktop 0.1.57 uses default refresh-only Firebase
+persistence and restores hosted identity across full restart without persisted
+ID tokens. Independent saved Gmail IMAP recipient/body edits and MCP sending have
+one matching Sent/received message. Original-key replay retains the same operation
+and message. The tick-created draft opening, both successful Café draft-mode
+ticks, the MrCall direct-send tick, BOTH normal-clone FULL and public provenance
+remain required. Gmail web is unverified.
+
+The original 17-target order has zero remaining targets in Drafts at its first
+new-route execution; the unrelated later draft is preserved. Exact read-only
+reconciliation locates 14 originals in recoverable Trash and does not locate
+three. The command performs zero moves and does not establish the cause of their
+earlier disappearance. The HB November 23 plan and November 24 IMAP/auth
+amendments own installed acceptance and release. No Gmail OAuth grant is required.
+
+Desktop configures accounts, services and client access. Daily operator work
+uses the remote MCP. Ordinary opted-in rule changes are direct revisioned chat
+writes; privileged legacy management retains verified-owner admission. Source
+checks do not establish a new installed configurator or provider acceptance.
+The [data flow](operator-data-flows.md) owns these boundaries.
+
+Hosted profiles retain separate private stores and company-memory capabilities
+under the [runtime contract](cross-cutting-contracts.md). The completed sandbox
+work does not enable self-serve provisioning. Current task-assignment and company
+sharing evidence retain their [assignment](execution-plans/2026-10-08-explicit-task-assignment.md)
+and [fenced-join](execution-plans/2026-10-08-mrcall-company-memory-sharing.md) owners.
+The separate contextual-email enrollment candidate remains unreleased.
+
+The Stripe prerelease and hosted verification remain with the
+[installer](execution-plans/2026-10-16-stripe-test-installer.md) and
+[startup](execution-plans/2026-10-16-stripe-startup-recovery.md) plans. Qonto typed
+credentials, packaged GUI and provider comparison remain with the
+[banking plan](execution-plans/2026-10-04-qonto-connection.md). No new banking or
+payment effect follows from the mailbox candidate.
+
+Production voice and revisioned company instructions retain their
+[source](execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md) and
+[knowledge](execution-plans/2026-09-28-voice-company-knowledge.md) owners. Settings
+keeps engine provider, model, budget and preparation controls separate from
+headless operator and direct kernel classifier controls; see
+[setup](operator-setup.md#ai-execution-and-controls).
+
+## Unresolved
+
+- Mailbox delivery needs both ordinary modes, BOTH normal-clone FULL,
+  tick-created draft opening in installed Desktop and public release provenance.
+  Gmail edits are independently exercised through IMAP; Gmail web is unverified. The exact 17-target Trash
+  instruction remains separate from private-row retirement and later drafts.
+- Native automatic bootstrap, broad RPC parity, customer reply quality and full
+  Desktop packaging retain the parent operator obligations. Historical MCP helper
+  pairing does not establish wider kernel CLI or installed FULL acceptance.
+- Qonto packaged/provider comparison, Stripe GUI acceptance, live PEC, Windows
+  imports and Intel installer acceptance retain their existing owners.
+- Provisioning/membership, same-value Settings catalog reload, product chat,
+  approval isolation, Calendar and broader security verification remain open with
+  their existing owners. Source checks make no paid preparation call.
+- Broader spoken voice detail, repetition and latency, K3 funded-credit behavior
+  and mnemonic corpus/model acceptance remain separate verification boundaries.
+
+## Next
+
+1. Finish BOTH normal-clone FULL and immutable public release provenance.
+2. Complete installed Desktop tick-draft opening and ordinary launcher tests;
+   preserve recurring pauses, budgets and uncertain receipts.
+3. Preserve the completed original-17 conditional result and its three unlocated
+   identities, then complete public provenance and final installed review under
+   the governing HB plan.
+````
+
+# Active Context Archive
+
+Historical snapshots and the previously committed archive are retained verbatim.
+This file is cold storage; current state is in active-context.md.
+
+## 2026-11-24 — Before completed original-target next-step reconciliation
+
+````markdown
+---
+doc_baseline_commit: f937091a1ab3834f17e60479d567e68b3b0ca49e
+doc_baseline_date: 2026-11-22
+---
+
+# Active Context — Cross-cutting
+
+<!-- doc-scope:start -->
+Scope: the cross-cutting volatile state of mrcall-desktop — what spans
+engine ↔ app or describes the repo as a whole (the JSON-RPC contract, the
+release pipeline, the brand rename, monorepo conventions). Engine-only state
+lives in [`../engine/docs/active-context.md`](../engine/docs/active-context.md),
+app-only state in [`../app/docs/active-context.md`](../app/docs/active-context.md),
+durable cross-cutting facts in [`../AGENTS.md`](../AGENTS.md) and the documents
+[`README.md`](README.md) routes to, pruned narrative in
+[`active-context-archive.md`](active-context-archive.md). A living snapshot of
+what is *current*, targeting ≤ ~120 lines.
+<!-- doc-scope:end -->
+
+## State now
+
+All seven hosted engines run the same immutable dev12 release from source
+`a4b03ad5`. Actual process identities, arguments, listening sockets and all 492
+package files match. Both normal operator clones use the exact local v0.76.1
+artifact. Recurring schedules stay paused outside bounded acceptance windows. Café Production
+is the routed operator MCP profile.
+
+The [mailbox implementation](mailbox-drafts.md) uses existing primary IMAP/SMTP
+app passwords. The engine owns the current mailbox draft, SMTP transmission and
+exact Sent confirmation. Durable operation identities prevent retransmission
+across caller retries and actual process restarts. Strict singleton full-MIME
+source headers are normalized; ambiguous sources remain held. The
+[migration contract](mailbox-draft-migration.md) retains original send fences and
+compatible recovery without restoring discarded internal text. All seven actual
+databases have completed internal draft retirement with zero provider mutations.
+
+Installed packaged Linux Desktop 0.1.57 uses default refresh-only Firebase
+persistence and restores hosted identity across full restart without persisted
+ID tokens. Independent saved Gmail IMAP recipient/body edits and MCP sending have
+one matching Sent/received message. Original-key replay retains the same operation
+and message. The tick-created draft opening, both successful Café draft-mode
+ticks, the MrCall direct-send tick, BOTH normal-clone FULL and public provenance
+remain required. Gmail web is unverified.
+
+The original 17-target order has zero remaining targets in Drafts at its first
+new-route execution; the unrelated later draft is preserved. Exact read-only
+reconciliation locates 14 originals in recoverable Trash and does not locate
+three. The command performs zero moves and does not establish the cause of their
+earlier disappearance. The HB November 23 plan and November 24 IMAP/auth
+amendments own installed acceptance and release. No Gmail OAuth grant is required.
+
+Desktop configures accounts, services and client access. Daily operator work
+uses the remote MCP. Ordinary opted-in rule changes are direct revisioned chat
+writes; privileged legacy management retains verified-owner admission. Source
+checks do not establish a new installed configurator or provider acceptance.
+The [data flow](operator-data-flows.md) owns these boundaries.
+
+Hosted profiles retain separate private stores and company-memory capabilities
+under the [runtime contract](cross-cutting-contracts.md). The completed sandbox
+work does not enable self-serve provisioning. Current task-assignment and company
+sharing evidence retain their [assignment](execution-plans/2026-10-08-explicit-task-assignment.md)
+and [fenced-join](execution-plans/2026-10-08-mrcall-company-memory-sharing.md) owners.
+The separate contextual-email enrollment candidate remains unreleased.
+
+The Stripe prerelease and hosted verification remain with the
+[installer](execution-plans/2026-10-16-stripe-test-installer.md) and
+[startup](execution-plans/2026-10-16-stripe-startup-recovery.md) plans. Qonto typed
+credentials, packaged GUI and provider comparison remain with the
+[banking plan](execution-plans/2026-10-04-qonto-connection.md). No new banking or
+payment effect follows from the mailbox candidate.
+
+Production voice and revisioned company instructions retain their
+[source](execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md) and
+[knowledge](execution-plans/2026-09-28-voice-company-knowledge.md) owners. Settings
+keeps engine provider, model, budget and preparation controls separate from
+headless operator and direct kernel classifier controls; see
+[setup](operator-setup.md#ai-execution-and-controls).
+
+## Unresolved
+
+- Mailbox delivery needs both ordinary modes, BOTH normal-clone FULL,
+  tick-created draft opening in installed Desktop and public release provenance.
+  Gmail edits are independently exercised through IMAP; Gmail web is unverified. The exact 17-target Trash
+  instruction remains separate from private-row retirement and later drafts.
+- Native automatic bootstrap, broad RPC parity, customer reply quality and full
+  Desktop packaging retain the parent operator obligations. Historical MCP helper
+  pairing does not establish wider kernel CLI or installed FULL acceptance.
+- Qonto packaged/provider comparison, Stripe GUI acceptance, live PEC, Windows
+  imports and Intel installer acceptance retain their existing owners.
+- Provisioning/membership, same-value Settings catalog reload, product chat,
+  approval isolation, Calendar and broader security verification remain open with
+  their existing owners. Source checks make no paid preparation call.
+- Broader spoken voice detail, repetition and latency, K3 funded-credit behavior
+  and mnemonic corpus/model acceptance remain separate verification boundaries.
+
+## Next
+
+1. Finish BOTH normal-clone FULL and immutable public release provenance.
+2. Complete installed Desktop tick-draft opening and ordinary launcher tests;
+   preserve recurring pauses, budgets and uncertain receipts.
+3. Reconcile original 17 absence with exact provider evidence, then complete public
+   provenance and final installed review under the governing HB plan.
+
+````
+
+## 2026-11-24 — Before mailbox snapshot reconciliation
+
+````markdown
+---
+doc_baseline_commit: f937091a1ab3834f17e60479d567e68b3b0ca49e
+doc_baseline_date: 2026-11-22
+---
+
+# Active Context — Cross-cutting
+
+<!-- doc-scope:start -->
+Scope: the cross-cutting volatile state of mrcall-desktop — what spans
+engine ↔ app or describes the repo as a whole (the JSON-RPC contract, the
+release pipeline, the brand rename, monorepo conventions). Engine-only state
+lives in [`../engine/docs/active-context.md`](../engine/docs/active-context.md),
+app-only state in [`../app/docs/active-context.md`](../app/docs/active-context.md),
+durable cross-cutting facts in [`../AGENTS.md`](../AGENTS.md) and the documents
+[`README.md`](README.md) routes to, pruned narrative in
+[`active-context-archive.md`](active-context-archive.md). A living snapshot of
+what is *current*, targeting ≤ ~120 lines.
+<!-- doc-scope:end -->
+
+## State now
+
+All seven hosted engines run the same immutable dev12 release from source
+`a4b03ad5`. Actual process identities, arguments, listening sockets and all 492
+package files match. Both normal operator clones use the exact local v0.76.1
+artifact. Recurring schedules stay paused outside bounded acceptance windows. Café Production
+is the routed operator MCP profile.
+
+The [mailbox implementation](mailbox-drafts.md) uses existing primary IMAP/SMTP
+app passwords. Legacy retirement on all seven actual databases discards 175
+internal draft rows and clears 47 campaign contacts without provider mutations.
+Original 118 send identities remain: 93 have exact Sent proof and 25 stay uncertain.
+The [migration contract](mailbox-draft-migration.md) retains source fences,
+journals and compatible recovery. Desktop 0.1.57 uses default refresh-only
+Firebase persistence. The installed Linux Electron bundle restores real hosted
+identity across full restart without persisting either ID token. The controlled
+Gmail IMAP edit and MCP send produce one matching Sent/received message. Replaying
+the original key after the actual engine restart retires only that exact draft;
+another replay retains the same operation and message. The first ordinary Café tick fails before test work: sender rollup hides the
+verified original, while a separate source has a folded Message-ID. Installed
+dev12 normalizes strict singleton headers. Both normal clones install the
+reviewed immutable kernel selection correction. Ordinary ticks and public installer
+release provenance remain required.
+
+The first new-route original 17 check finds all originals absent and preserves
+one unrelated draft. It moves zero messages. Exact read-only Trash reconciliation
+locates 14 originals; three are absent from both searched folders. The HB November 23 plan and November 24 IMAP/auth amendments own current
+acceptance, evidence and release. Both normal clone installations are verified; FULL and public provenance
+remain in progress. No Gmail OAuth grant is required.
+
+Desktop configures accounts, services and client access. Daily operator work
+uses the remote MCP. Ordinary opted-in rule changes are direct revisioned chat
+writes; privileged legacy management retains verified-owner admission. Source
+checks do not establish a new installed configurator or provider acceptance.
+The [data flow](operator-data-flows.md) owns these boundaries.
+
+Hosted profiles retain separate private stores and company-memory capabilities
+under the [runtime contract](cross-cutting-contracts.md). The completed sandbox
+work does not enable self-serve provisioning. Current task-assignment and company
+sharing evidence retain their [assignment](execution-plans/2026-10-08-explicit-task-assignment.md)
+and [fenced-join](execution-plans/2026-10-08-mrcall-company-memory-sharing.md) owners.
+The separate contextual-email enrollment candidate remains unreleased.
+
+The Stripe prerelease and hosted verification remain with the
+[installer](execution-plans/2026-10-16-stripe-test-installer.md) and
+[startup](execution-plans/2026-10-16-stripe-startup-recovery.md) plans. Qonto typed
+credentials, packaged GUI and provider comparison remain with the
+[banking plan](execution-plans/2026-10-04-qonto-connection.md). No new banking or
+payment effect follows from the mailbox candidate.
+
+Production voice and revisioned company instructions retain their
+[source](execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md) and
+[knowledge](execution-plans/2026-09-28-voice-company-knowledge.md) owners. Settings
+keeps engine provider, model, budget and preparation controls separate from
+headless operator and direct kernel classifier controls; see
+[setup](operator-setup.md#ai-execution-and-controls).
+
+## Unresolved
+
+- Mailbox delivery needs both ordinary modes, BOTH normal-clone FULL,
+  tick-created draft opening in installed Desktop and public release provenance.
+  Gmail edits are independently exercised through IMAP; Gmail web is unverified. The exact 17-target Trash
+  instruction remains separate from private-row retirement and later drafts.
+- Native automatic bootstrap, broad RPC parity, customer reply quality and full
+  Desktop packaging retain the parent operator obligations. Historical MCP helper
+  pairing does not establish wider kernel CLI or installed FULL acceptance.
+- Qonto packaged/provider comparison, Stripe GUI acceptance, live PEC, Windows
+  imports and Intel installer acceptance retain their existing owners.
+- Provisioning/membership, same-value Settings catalog reload, product chat,
+  approval isolation, Calendar and broader security verification remain open with
+  their existing owners. Source checks make no paid preparation call.
+- Broader spoken voice detail, repetition and latency, K3 funded-credit behavior
+  and mnemonic corpus/model acceptance remain separate verification boundaries.
+
+## Next
+
+1. Finish BOTH normal-clone FULL and immutable public release provenance.
+2. Complete installed Desktop tick-draft opening and ordinary launcher tests;
+   preserve recurring pauses, budgets and uncertain receipts.
+3. Reconcile original 17 absence with exact provider evidence, then complete public
+   provenance and final installed review under the governing HB plan.
+
+````
+
+## 2026-11-24 — Before verified v0.76.1 normal adoption
+
+````markdown
+---
+doc_baseline_commit: f937091a1ab3834f17e60479d567e68b3b0ca49e
+doc_baseline_date: 2026-11-22
+---
+
+# Active Context — Cross-cutting
+
+<!-- doc-scope:start -->
+Scope: the cross-cutting volatile state of mrcall-desktop — what spans
+engine ↔ app or describes the repo as a whole (the JSON-RPC contract, the
+release pipeline, the brand rename, monorepo conventions). Engine-only state
+lives in [`../engine/docs/active-context.md`](../engine/docs/active-context.md),
+app-only state in [`../app/docs/active-context.md`](../app/docs/active-context.md),
+durable cross-cutting facts in [`../AGENTS.md`](../AGENTS.md) and the documents
+[`README.md`](README.md) routes to, pruned narrative in
+[`active-context-archive.md`](active-context-archive.md). A living snapshot of
+what is *current*, targeting ≤ ~120 lines.
+<!-- doc-scope:end -->
+
+## State now
+
+All seven hosted engines run the same immutable dev12 release from source
+`a4b03ad5`. Actual process identities, arguments, listening sockets and all 492
+package files match. Both normal operator clones use the exact local v0.76.0
+artifact. Recurring schedules stay paused outside bounded acceptance windows. Café Production
+is the routed operator MCP profile.
+
+The [mailbox implementation](mailbox-drafts.md) uses existing primary IMAP/SMTP
+app passwords. Legacy retirement on all seven actual databases discards 175
+internal draft rows and clears 47 campaign contacts without provider mutations.
+Original 118 send identities remain: 93 have exact Sent proof and 25 stay uncertain.
+The [migration contract](mailbox-draft-migration.md) retains source fences,
+journals and compatible recovery. Desktop 0.1.57 uses default refresh-only
+Firebase persistence. The installed Linux Electron bundle restores real hosted
+identity across full restart without persisting either ID token. The controlled
+Gmail IMAP edit and MCP send produce one matching Sent/received message. Replaying
+the original key after the actual engine restart retires only that exact draft;
+another replay retains the same operation and message. The first ordinary Café tick fails before test work: sender rollup hides the
+verified original, while a separate source has a folded Message-ID. Installed
+dev12 normalizes strict singleton headers; the reviewed kernel correction
+requires its forward immutable release. Ordinary ticks and public installer
+release provenance remain required.
+
+The first new-route original 17 check finds all originals absent and preserves
+one unrelated draft. It moves zero messages. Exact read-only Trash reconciliation
+locates 14 originals; three are absent from both searched folders. The HB November 23 plan and November 24 IMAP/auth amendments own current
+acceptance, evidence and release. Both normal clone installations are verified; FULL and public provenance
+remain in progress. No Gmail OAuth grant is required.
+
+Desktop configures accounts, services and client access. Daily operator work
+uses the remote MCP. Ordinary opted-in rule changes are direct revisioned chat
+writes; privileged legacy management retains verified-owner admission. Source
+checks do not establish a new installed configurator or provider acceptance.
+The [data flow](operator-data-flows.md) owns these boundaries.
+
+Hosted profiles retain separate private stores and company-memory capabilities
+under the [runtime contract](cross-cutting-contracts.md). The completed sandbox
+work does not enable self-serve provisioning. Current task-assignment and company
+sharing evidence retain their [assignment](execution-plans/2026-10-08-explicit-task-assignment.md)
+and [fenced-join](execution-plans/2026-10-08-mrcall-company-memory-sharing.md) owners.
+The separate contextual-email enrollment candidate remains unreleased.
+
+The Stripe prerelease and hosted verification remain with the
+[installer](execution-plans/2026-10-16-stripe-test-installer.md) and
+[startup](execution-plans/2026-10-16-stripe-startup-recovery.md) plans. Qonto typed
+credentials, packaged GUI and provider comparison remain with the
+[banking plan](execution-plans/2026-10-04-qonto-connection.md). No new banking or
+payment effect follows from the mailbox candidate.
+
+Production voice and revisioned company instructions retain their
+[source](execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md) and
+[knowledge](execution-plans/2026-09-28-voice-company-knowledge.md) owners. Settings
+keeps engine provider, model, budget and preparation controls separate from
+headless operator and direct kernel classifier controls; see
+[setup](operator-setup.md#ai-execution-and-controls).
+
+## Unresolved
+
+- Mailbox delivery needs both ordinary modes, BOTH normal-clone FULL,
+  tick-created draft opening in installed Desktop and public release provenance.
+  Gmail edits are independently exercised through IMAP; Gmail web is unverified. The exact 17-target Trash
+  instruction remains separate from private-row retirement and later drafts.
+- Native automatic bootstrap, broad RPC parity, customer reply quality and full
+  Desktop packaging retain the parent operator obligations. Historical MCP helper
+  pairing does not establish wider kernel CLI or installed FULL acceptance.
+- Qonto packaged/provider comparison, Stripe GUI acceptance, live PEC, Windows
+  imports and Intel installer acceptance retain their existing owners.
+- Provisioning/membership, same-value Settings catalog reload, product chat,
+  approval isolation, Calendar and broader security verification remain open with
+  their existing owners. Source checks make no paid preparation call.
+- Broader spoken voice detail, repetition and latency, K3 funded-credit behavior
+  and mnemonic corpus/model acceptance remain separate verification boundaries.
+
+## Next
+
+1. Finish BOTH normal-clone FULL and immutable public release provenance.
+2. Complete installed Desktop tick-draft opening and ordinary launcher tests;
+   preserve recurring pauses, budgets and uncertain receipts.
+3. Reconcile original 17 absence with exact provider evidence, then complete public
+   provenance and final installed review under the governing HB plan.
+
+````
+
+## 2026-11-24 — Before dev12 installed checkpoint
+
+````markdown
+---
+doc_baseline_commit: f937091a1ab3834f17e60479d567e68b3b0ca49e
+doc_baseline_date: 2026-11-22
+---
+
+# Active Context — Cross-cutting
+
+<!-- doc-scope:start -->
+Scope: the cross-cutting volatile state of mrcall-desktop — what spans
+engine ↔ app or describes the repo as a whole (the JSON-RPC contract, the
+release pipeline, the brand rename, monorepo conventions). Engine-only state
+lives in [`../engine/docs/active-context.md`](../engine/docs/active-context.md),
+app-only state in [`../app/docs/active-context.md`](../app/docs/active-context.md),
+durable cross-cutting facts in [`../AGENTS.md`](../AGENTS.md) and the documents
+[`README.md`](README.md) routes to, pruned narrative in
+[`active-context-archive.md`](active-context-archive.md). A living snapshot of
+what is *current*, targeting ≤ ~120 lines.
+<!-- doc-scope:end -->
+
+## State now
+
+All seven hosted engines run the same immutable dev11 release from source
+`6a788274`. Actual process identities, arguments, listening sockets and all 492
+package files match. Both normal operator clones use the exact local v0.76.0
+artifact. Recurring schedules stay paused outside bounded acceptance windows. Café Production
+is the routed operator MCP profile.
+
+The [mailbox implementation](mailbox-drafts.md) uses existing primary IMAP/SMTP
+app passwords. Legacy retirement on all seven actual databases discards 175
+internal draft rows and clears 47 campaign contacts without provider mutations.
+Original 118 send identities remain: 93 have exact Sent proof and 25 stay uncertain.
+The [migration contract](mailbox-draft-migration.md) retains source fences,
+journals and compatible recovery. Desktop 0.1.57 uses default refresh-only
+Firebase persistence. The installed Linux Electron bundle restores real hosted
+identity across full restart without persisting either ID token. The controlled
+Gmail IMAP edit and MCP send produce one matching Sent/received message. Replaying
+the original key after the actual engine restart retires only that exact draft;
+another replay retains the same operation and message. Ordinary ticks and public
+installer release provenance remain separately required.
+
+The first new-route original 17 check finds all originals absent and preserves
+one unrelated draft. It moves zero messages. Exact read-only Trash reconciliation
+locates 14 originals; three are absent from both searched folders. The HB November 23 plan and November 24 IMAP/auth amendments own current
+acceptance, evidence and release. Both normal clone installations are verified; FULL and public provenance
+remain in progress. No Gmail OAuth grant is required.
+
+Desktop configures accounts, services and client access. Daily operator work
+uses the remote MCP. Ordinary opted-in rule changes are direct revisioned chat
+writes; privileged legacy management retains verified-owner admission. Source
+checks do not establish a new installed configurator or provider acceptance.
+The [data flow](operator-data-flows.md) owns these boundaries.
+
+Hosted profiles retain separate private stores and company-memory capabilities
+under the [runtime contract](cross-cutting-contracts.md). The completed sandbox
+work does not enable self-serve provisioning. Current task-assignment and company
+sharing evidence retain their [assignment](execution-plans/2026-10-08-explicit-task-assignment.md)
+and [fenced-join](execution-plans/2026-10-08-mrcall-company-memory-sharing.md) owners.
+The separate contextual-email enrollment candidate remains unreleased.
+
+The Stripe prerelease and hosted verification remain with the
+[installer](execution-plans/2026-10-16-stripe-test-installer.md) and
+[startup](execution-plans/2026-10-16-stripe-startup-recovery.md) plans. Qonto typed
+credentials, packaged GUI and provider comparison remain with the
+[banking plan](execution-plans/2026-10-04-qonto-connection.md). No new banking or
+payment effect follows from the mailbox candidate.
+
+Production voice and revisioned company instructions retain their
+[source](execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md) and
+[knowledge](execution-plans/2026-09-28-voice-company-knowledge.md) owners. Settings
+keeps engine provider, model, budget and preparation controls separate from
+headless operator and direct kernel classifier controls; see
+[setup](operator-setup.md#ai-execution-and-controls).
+
+## Unresolved
+
+- Mailbox delivery needs both ordinary modes, BOTH normal-clone FULL,
+  tick-created draft opening in installed Desktop and public release provenance.
+  Gmail edits are independently exercised through IMAP; Gmail web is unverified. The exact 17-target Trash
+  instruction remains separate from private-row retirement and later drafts.
+- Native automatic bootstrap, broad RPC parity, customer reply quality and full
+  Desktop packaging retain the parent operator obligations. Historical MCP helper
+  pairing does not establish wider kernel CLI or installed FULL acceptance.
+- Qonto packaged/provider comparison, Stripe GUI acceptance, live PEC, Windows
+  imports and Intel installer acceptance retain their existing owners.
+- Provisioning/membership, same-value Settings catalog reload, product chat,
+  approval isolation, Calendar and broader security verification remain open with
+  their existing owners. Source checks make no paid preparation call.
+- Broader spoken voice detail, repetition and latency, K3 funded-credit behavior
+  and mnemonic corpus/model acceptance remain separate verification boundaries.
+
+## Next
+
+1. Finish BOTH normal-clone FULL and immutable public release provenance.
+2. Complete installed Desktop tick-draft opening and ordinary launcher tests;
+   preserve recurring pauses, budgets and uncertain receipts.
+3. Reconcile original 17 absence with exact provider evidence, then complete public
+   provenance and final installed review under the governing HB plan.
+
+````
+
+
+## 2026-11-24 — Pre-cutover mailbox snapshot
+
+````markdown
+
+---
+doc_baseline_commit: f937091a1ab3834f17e60479d567e68b3b0ca49e
+doc_baseline_date: 2026-11-22
+---
+
+# Active Context — Cross-cutting
+
+<!-- doc-scope:start -->
+Scope: the cross-cutting volatile state of mrcall-desktop — what spans
+engine ↔ app or describes the repo as a whole (the JSON-RPC contract, the
+release pipeline, the brand rename, monorepo conventions). Engine-only state
+lives in [`../engine/docs/active-context.md`](../engine/docs/active-context.md),
+app-only state in [`../app/docs/active-context.md`](../app/docs/active-context.md),
+durable cross-cutting facts in [`../AGENTS.md`](../AGENTS.md) and the documents
+[`README.md`](README.md) routes to, pruned narrative in
+[`active-context-archive.md`](active-context-archive.md). A living snapshot of
+what is *current*, targeting ≤ ~120 lines.
+<!-- doc-scope:end -->
+
+## State now
+
+All seven hosted engines run dev7. Both installed operator clones use kernel
+v0.74.1 and their recurring schedules are paused. Café 124 Production is the
+routed operator MCP profile. The current runtime is separate from the source
+candidate described below.
+
+The [mailbox candidate](mailbox-drafts.md) uses primary-mailbox IMAP and raw SMTP
+with the existing app password. Exact current-message handles replace the
+unreleased API container assumption. Editable text lives only in the mailbox;
+body-free receipts bind effects and replacement lineage across restart. The
+[legacy migration](mailbox-draft-migration.md) discards internal rows without
+publication. The IMAP source milestone and installed acceptance are tracked in
+the HB November 24 amendment and governing November 23 delivery plan.
+
+No Gmail OAuth grant is required. Production remains dev7; candidate cutover,
+legacy retirement and real ordinary acceptance ticks remain unverified. The
+previous dev1 paired-build recipe remains [historical source evidence](operator-source-build.md).
+
+Desktop configures accounts, services and client access. Daily operator work
+uses the remote MCP. Ordinary opted-in rule changes are direct revisioned chat
+writes; privileged legacy management retains verified-owner admission. Source
+checks do not establish a new installed configurator or provider acceptance.
+The [data flow](operator-data-flows.md) owns these boundaries.
+
+Hosted profiles retain separate private stores and company-memory capabilities
+under the [runtime contract](cross-cutting-contracts.md). The completed sandbox
+work does not enable self-serve provisioning. Current task-assignment and company
+sharing evidence retain their [assignment](execution-plans/2026-10-08-explicit-task-assignment.md)
+and [fenced-join](execution-plans/2026-10-08-mrcall-company-memory-sharing.md) owners.
+The separate contextual-email enrollment candidate remains unreleased.
+
+The Stripe prerelease and hosted verification remain with the
+[installer](execution-plans/2026-10-16-stripe-test-installer.md) and
+[startup](execution-plans/2026-10-16-stripe-startup-recovery.md) plans. Qonto typed
+credentials, packaged GUI and provider comparison remain with the
+[banking plan](execution-plans/2026-10-04-qonto-connection.md). No new banking or
+payment effect follows from the mailbox candidate.
+
+Production voice and revisioned company instructions retain their
+[source](execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md) and
+[knowledge](execution-plans/2026-09-28-voice-company-knowledge.md) owners. Settings
+keeps engine provider, model, budget and preparation controls separate from
+headless operator and direct kernel classifier controls; see
+[setup](operator-setup.md#ai-execution-and-controls).
+
+## Unresolved
+
+- Mailbox delivery needs final IMAP package verification and
+  all installed-product acceptance checks. The replacement transport has fresh source approval. Synthetic
+  browser/provider tests are source evidence only. The exact 17-target Trash
+  instruction remains separate from private-row retirement and later drafts.
+- Native automatic bootstrap, broad RPC parity, customer reply quality and full
+  Desktop packaging retain the parent operator obligations. Historical MCP helper
+  pairing does not establish wider kernel CLI or installed FULL acceptance.
+- Qonto packaged/provider comparison, Stripe GUI acceptance, live PEC, Windows
+  imports and Intel installer acceptance retain their existing owners.
+- Provisioning/membership, same-value Settings catalog reload, product chat,
+  approval isolation, Calendar and broader security verification remain open with
+  their existing owners. Source checks make no paid preparation call.
+- Broader spoken voice detail, repetition and latency, K3 funded-credit behavior
+  and mnemonic corpus/model acceptance remain separate verification boundaries.
+
+## Next
+
+1. Finish immutable IMAP artifacts, migration rehearsal and documentation verification.
+2. Complete reviewed cutover, exact 17-target Trash and actual Desktop/MCP and
+   ordinary launcher tests; preserve recurring pauses, budgets and receipts.
+3. Continue unrelated work under its existing owner and acceptance boundary.
+
+
+
+````
+
+## 2026-11-24 — Superseded API transport snapshot
+
+````markdown
+
+---
+doc_baseline_commit: f937091a1ab3834f17e60479d567e68b3b0ca49e
+doc_baseline_date: 2026-11-22
+---
+
+# Active Context — Cross-cutting
+
+<!-- doc-scope:start -->
+Scope: the cross-cutting volatile state of mrcall-desktop — what spans
+engine ↔ app or describes the repo as a whole (the JSON-RPC contract, the
+release pipeline, the brand rename, monorepo conventions). Engine-only state
+lives in [`../engine/docs/active-context.md`](../engine/docs/active-context.md),
+app-only state in [`../app/docs/active-context.md`](../app/docs/active-context.md),
+durable cross-cutting facts in [`../AGENTS.md`](../AGENTS.md) and the documents
+[`README.md`](README.md) routes to, pruned narrative in
+[`active-context-archive.md`](active-context-archive.md). A living snapshot of
+what is *current*, targeting ≤ ~120 lines.
+<!-- doc-scope:end -->
+
+## State now
+
+All seven hosted engines run dev7. Both installed operator clones use kernel
+v0.74.1 and their recurring schedules are paused. Café 124 Production is the
+routed operator MCP profile. The current runtime is separate from the source
+candidate described below.
+
+The [mailbox candidate](mailbox-drafts.md) replaces editable private drafts with
+native Gmail draft containers shared by Desktop, MCP and kernel requests. The
+engine/Desktop milestone and the [legacy migration](mailbox-draft-migration.md)
+have source approval. The extended campaign producer keeps native handles and
+body-free recovery metadata. Migration compatibility has independent approval after seven copied-profile
+rehearsals. Kernel source integration is approved and the full kernel suite exits zero. Final operational review and installed acceptance remain open under the [leaf plan](execution-plans/2026-11-23-mailbox-drafts.md)
+and its governing HB plan.
+
+Gmail authorization is absent from all seven live credential inventories. The
+existing application client and service-user consent bootstrap are ready. No
+candidate cutover, destructive migration or real operator acceptance tick is
+established. The previous dev1 paired-build recipe remains
+[historical source evidence](operator-source-build.md), with its own unchanged
+publication and reconstruction obligations.
+
+Desktop configures accounts, services and client access. Daily operator work
+uses the remote MCP. Ordinary opted-in rule changes are direct revisioned chat
+writes; privileged legacy management retains verified-owner admission. Source
+checks do not establish a new installed configurator or provider acceptance.
+The [data flow](operator-data-flows.md) owns these boundaries.
+
+Hosted profiles retain separate private stores and company-memory capabilities
+under the [runtime contract](cross-cutting-contracts.md). The completed sandbox
+work does not enable self-serve provisioning. Current task-assignment and company
+sharing evidence retain their [assignment](execution-plans/2026-10-08-explicit-task-assignment.md)
+and [fenced-join](execution-plans/2026-10-08-mrcall-company-memory-sharing.md) owners.
+The separate contextual-email enrollment candidate remains unreleased.
+
+The Stripe prerelease and hosted verification remain with the
+[installer](execution-plans/2026-10-16-stripe-test-installer.md) and
+[startup](execution-plans/2026-10-16-stripe-startup-recovery.md) plans. Qonto typed
+credentials, packaged GUI and provider comparison remain with the
+[banking plan](execution-plans/2026-10-04-qonto-connection.md). No new banking or
+payment effect follows from the mailbox candidate.
+
+Production voice and revisioned company instructions retain their
+[source](execution-plans/2026-10-01-telephone-notes-source-is-phone-md.md) and
+[knowledge](execution-plans/2026-09-28-voice-company-knowledge.md) owners. Settings
+keeps engine provider, model, budget and preparation controls separate from
+headless operator and direct kernel classifier controls; see
+[setup](operator-setup.md#ai-execution-and-controls).
+
+## Unresolved
+
+- Mailbox delivery needs Gmail account consent, final package verification and
+  all installed-product acceptance checks. Source integration is approved. Synthetic
+  browser/provider tests are source evidence only. The exact 17-target Trash
+  instruction remains separate from private-row retirement and later drafts.
+- Native automatic bootstrap, broad RPC parity, customer reply quality and full
+  Desktop packaging retain the parent operator obligations. Historical MCP helper
+  pairing does not establish wider kernel CLI or installed FULL acceptance.
+- Qonto packaged/provider comparison, Stripe GUI acceptance, live PEC, Windows
+  imports and Intel installer acceptance retain their existing owners.
+- Provisioning/membership, same-value Settings catalog reload, product chat,
+  approval isolation, Calendar and broader security verification remain open with
+  their existing owners. Source checks make no paid preparation call.
+- Broader spoken voice detail, repetition and latency, K3 funded-credit behavior
+  and mnemonic corpus/model acceptance remain separate verification boundaries.
+
+## Next
+
+1. Finish release artifact and documentation verification while account consent is absent.
+2. Complete Gmail consent, the reviewed cutover and actual Desktop/MCP and ordinary
+   launcher tests; preserve paused recurring schedules and operation receipts.
+3. Continue unrelated work under its existing plan, without treating the mailbox
+   source milestone as acceptance of another installation or provider flow.
+
+
+
+````
+## 2026-11-24 — Previously committed archive body
+
+`````markdown
 ## 2026-11-23 — Mailbox integration before M2 source approval
 
 The [mailbox candidate](mailbox-drafts.md) replaces editable private drafts with
@@ -1520,3 +2257,4 @@ harness v3 bootstrap. It was the "Recent landings (last ~2 weeks)" table.*
 | 2026-05-22 | Current datetime injected into EVERY LLM request (single LLMClient chokepoint + chat_compaction bypass). | engine | `5f5c73e8` |
 | 2026-05-20 | MrCall channel: delegated/PKCE OAuth + `/mrcall` removed (Firebase-JWT only); MrCall tab lists + searches businesses; onboarding unblocked for MrCall-only users; in-wizard Calendar session fix. | engine + app + IPC | `770522e8..2b0a54ce` |
 | 2026-05-20 | WhatsApp voice-note transcription — event-time download + deferred faster-whisper `small`/int8 pass; archived chats excluded from memory/task analysis. Live download + packaged bundling still pending. | engine + app + IPC | [`../engine/docs/execution-plans/whatsapp-voice-transcription.md`](../engine/docs/execution-plans/whatsapp-voice-transcription.md) |
+`````

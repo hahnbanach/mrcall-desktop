@@ -19,25 +19,37 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-All seven hosted engines run dev7. Both installed operator clones use kernel
-v0.74.1 and their recurring schedules are paused. Café 124 Production is the
-routed operator MCP profile. The current runtime is separate from the source
-candidate described below.
+All seven hosted engines run the immutable dev13 release from source
+`2e27f02e`. Actual process identities, arguments, listeners and all 492
+package files match. Both normal operator clones use the exact local
+`v0.76.1` artifact. Café Production is the routed operator MCP profile.
 
-The [mailbox candidate](mailbox-drafts.md) replaces editable private drafts with
-native Gmail draft containers shared by Desktop, MCP and kernel requests. The
-engine/Desktop milestone and the [legacy migration](mailbox-draft-migration.md)
-have source approval. The extended campaign producer keeps native handles and
-body-free recovery metadata. Migration compatibility has independent approval after seven copied-profile
-rehearsals. Kernel source integration is approved and the full kernel suite exits zero. Final operational review and installed acceptance remain open under the [leaf plan](execution-plans/2026-11-23-mailbox-drafts.md)
-and its governing HB plan.
+The [mailbox implementation](mailbox-drafts.md) uses existing primary IMAP/SMTP
+app passwords. The engine owns the current mailbox draft, SMTP transmission and
+exact Sent confirmation. Accepted secondary keys resolve the durable canonical
+operation and Message-ID across process restarts. Strict singleton full-MIME
+source headers are normalized; ambiguous sources remain held. The
+[migration contract](mailbox-draft-migration.md) retains original send fences and
+compatible recovery without restoring discarded internal text. All seven actual
+databases have completed internal draft retirement with zero provider mutations.
 
-Gmail authorization is absent from all seven live credential inventories. The
-existing application client and service-user consent bootstrap are ready. No
-candidate cutover, destructive migration or real operator acceptance tick is
-established. The previous dev1 paired-build recipe remains
-[historical source evidence](operator-source-build.md), with its own unchanged
-publication and reconstruction obligations.
+Packaged Linux Desktop 0.1.57 restores hosted identity with refresh-only
+Firebase persistence and opens the exact first Café tick's native draft
+(UID 2515) on dev13. The first ordinary tick passes on dev12 and kernel
+`v0.76.1` with one exact selection, one draft and zero replies. Closed-home
+scans find no persisted ID token. Independent
+Gmail IMAP edits and MCP sending have one matching Sent and received message.
+The original key and an accepted RPC alias recover that delivery after real
+restart, with zero remaining drafts. The signed Apple Silicon 0.1.57 candidate
+is unnotarized after Apple's agreement-related refusal. The
+[delivery plan](execution-plans/2026-11-23-mailbox-drafts.md) records the evidence.
+
+The original 17-target order has zero remaining targets in Drafts at its first
+new-route execution; the unrelated later draft is preserved. Exact read-only
+reconciliation locates 14 originals in recoverable Trash and leaves three
+unlocated. The command moves zero messages and does not establish the cause of
+their earlier disappearance. The HB November 23 plan and November 24 IMAP/auth
+amendments own installed acceptance and release. No Gmail OAuth grant is required.
 
 Desktop configures accounts, services and client access. Daily operator work
 uses the remote MCP. Ordinary opted-in rule changes are direct revisioned chat
@@ -68,10 +80,12 @@ headless operator and direct kernel classifier controls; see
 
 ## Unresolved
 
-- Mailbox delivery needs Gmail account consent, final package verification and
-  all installed-product acceptance checks. Source integration is approved. Synthetic
-  browser/provider tests are source evidence only. The exact 17-target Trash
-  instruction remains separate from private-row retirement and later drafts.
+- The second Café tick on the same original and the first ordinary MrCall send
+  run on dev13 in one shared acceptance window. Recurring cron entries are
+  suppressed and the pause files are temporarily removed until both runs finish.
+- Both normal-clone FULL checks still need the cumulative read-only, dedup,
+  degraded CRM and remaining safety evidence. Gmail web interaction, public
+  installer/kernel provenance and separate final review also remain open.
 - Native automatic bootstrap, broad RPC parity, customer reply quality and full
   Desktop packaging retain the parent operator obligations. Historical MCP helper
   pairing does not establish wider kernel CLI or installed FULL acceptance.
@@ -85,8 +99,10 @@ headless operator and direct kernel classifier controls; see
 
 ## Next
 
-1. Finish release artifact and documentation verification while account consent is absent.
-2. Complete Gmail consent, the reviewed cutover and actual Desktop/MCP and ordinary
-   launcher tests; preserve paused recurring schedules and operation receipts.
-3. Continue unrelated work under its existing plan, without treating the mailbox
-   source milestone as acceptance of another installation or provider flow.
+1. Verify both running launcher outcomes and provider evidence. Restore exact
+   recurring cron and both pause files after both runs finish.
+2. Complete both-clone FULL and Gmail web acceptance. Preserve the completed
+   original-17 conditional result with its three unlocated identities.
+3. Complete documentation review, separate final installed review and public
+   provenance under the governing HB plan. Verify the seven engines after
+   the actual service checkout follows Desktop main.

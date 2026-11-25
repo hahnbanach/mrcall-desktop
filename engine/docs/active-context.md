@@ -8,20 +8,37 @@ are preserved verbatim in [active-context-archive.md](active-context-archive.md)
 
 ## State now
 
-The [mailbox draft candidate](../../docs/mailbox-drafts.md) has approved
-engine/Desktop and [legacy migration](../../docs/mailbox-draft-migration.md)
-milestones, plus approved kernel source integration and a full kernel suite
-with observed exit zero. Its native Gmail adapter, encrypted authorization, mailbox operations,
-durable receipts, public callers and Desktop view have synthetic integration
-checks. Actual Gmail consent and installed acceptance remain open in the
-[leaf plan](../../docs/execution-plans/2026-11-23-mailbox-drafts.md) and governing
-HB November 23 plan. No candidate rollout or real acceptance tick is established.
+The [mailbox draft implementation](../../docs/mailbox-drafts.md) is installed as
+`0.1.57.dev13+mailboximap20261124.mrcall` on all seven hosted engines. All 492
+package files, actual process UID/cwd/arguments and expected listeners match the
+immutable source `2e27f02e` release. Primary IMAP and raw SMTP use existing app
+passwords; Firebase identity and Calendar OAuth remain separate. The new MCP
+lists the current mailbox and exposes explicit recoverable Trash and keyed send.
 
-All seven actual hosted processes retain the same dev7 package and own their
-listening sockets. Dev7 scopes assignment reads to a member's verified mailboxes;
-its rollback is dev6. The deployed MCP still uses internal drafts and review
-copies. Café Production is the only routed MCP profile. Its existing full grants
-include sending. The candidate replaces that pair with one mailbox draft.
+Actual legacy retirement discards 175 internal draft rows, clears 47 campaign
+contacts and preserves 32 journal rows across seven databases. Exact Sent finds 93
+of 118 original send identities; 25 remain uncertain with their original fences.
+The migration publishes, deletes and sends zero provider messages. Both repeated
+migration and exact writer/schedule fences pass. Saved models, daily limits,
+profile configuration and parked voice are preserved.
+
+The source aggregate passes 398 checks on unchanged product bytes. Installed
+MCP sending reads saved Gmail IMAP recipients and body. The original key and an
+accepted native RPC alias recover the same canonical operation and Message-ID
+after an actual Café service restart. Independent provider counts are one Sent,
+one received and zero drafts. A new, unbound MCP key on the retired handle
+refuses before binding. Strict singleton full-MIME source headers are normalized.
+Both normal clones use immutable local kernel `v0.76.1`. The first ordinary
+Café tick on dev12 prepares one draft with zero replies. Packaged Linux Desktop
+opens that exact draft on dev13. See the
+[leaf plan](../../docs/execution-plans/2026-11-23-mailbox-drafts.md) for exact
+evidence and remaining acceptance.
+
+The original 17-target instruction is complete conditionally: none is present
+at the first new-route execution, zero messages move and the unrelated later
+draft is preserved. Exact read-only reconciliation locates 14 originals in
+recoverable Trash; three are not located. Their earlier disappearance has no
+established actor or cause.
 
 Company assignments retain published Desktop v0.1.56 acceptance. Six company
 profiles have trusted membership, root-owned verification trust and tenant-
@@ -60,22 +77,21 @@ approval and prior authenticated conversation requirements.
 
 ## Unresolved
 
-- All seven Gmail grant inventories lack Gmail scope. Existing app passwords,
-  Calendar read-only grants and Drive service accounts cannot authorize native
-  drafts. The application client is staged; account consent remains external.
-- Native Gmail Message-ID preservation, saved Gmail web edits,
-  two Café ticks, one MrCall direct-send tick, Desktop installation and fleet
-  cutover remain required. Internal rows and the exact 17 mailbox drafts are
-  separate cleanup operations; neither is performed by source checks.
+- The second Café tick on the same original and the first MrCall direct send
+  run on dev13 in a shared acceptance window. Their outcomes and quota,
+  provider and restoration receipts remain open.
+- Both-clone FULL, public provenance and Gmail web interaction remain open.
+  The original-17 order is complete with zero moves. Fourteen originals are
+  in recoverable Trash and three are unlocated.
 - Main's broad test tree and RPC contract checks have recorded pre-existing
   failures, including Qonto finance rules that no hosted unit runs. Candidate
   focused checks do not claim that broad baseline is repaired.
 - Six unit drop-ins sort after `tenant.conf`; reconcile returns 3. Profile
   changes or a base-checkout advance can restart the fleet without checking
   for a telephone call. DEBUG journal records include addresses.
-- Deployed kernel selection takes two conversations per tick and retains
-  escalation holds. The candidate must preserve human drafts while making
-  both acceptance ticks genuinely examine the same inbound.
+- Kernel selection retains two conversations per tick, current protected-original
+  proof and ordinary escalation holds. The second Café tick must select the
+  same inbound and preserve the draft created by the first.
 - One Café intake has a retained 177-second observation against a 180-second
   caller wait. Three support assignment projections remain unknown. Those
   historical causes are not established by this delivery.
@@ -92,11 +108,14 @@ approval and prior authenticated conversation requirements.
 
 ## Next
 
-1. Complete artifact and documentation verification, then obtain mailbox consent
-   before candidate operational acceptance.
-2. Complete the exact 17-target Trash order, installed MCP/Gmail/Desktop flow,
-   ordinary scheduled tests and seven-engine release checks under the HB plan.
-3. Preserve recurring pauses, actual budgets and pending receipt state; never
-   restore discarded drafts or retransmit an uncertain send during rollback.
+1. Verify the two running ordinary outcomes and their provider evidence. Keep
+   recurring jobs suppressed during the window and restore both pause files
+   and the original cron after both runs finish.
+2. Complete the cumulative checks for both-clone FULL, Gmail web evidence,
+   documentation and separate final review. Verify public provenance and all
+   seven process identities after the published Desktop main reaches the
+   actual service checkout.
+3. Preserve saved budgets and pending receipt state. Compatible rollback
+   preserves uncertain send identities and discarded drafts stay discarded.
 4. Continue unrelated Qonto, PEC, mnemonic, billing and voice work only under
    its existing owner and acceptance boundary.

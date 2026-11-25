@@ -99,7 +99,7 @@ See [execution, billing and pause boundaries](docs/operator-setup.md#ai-executio
 | Path | What | Owns |
 |------|------|------|
 | `engine/` | Python 3.11+ sidecar — IMAP / SMTP, WhatsApp (neonize), MrCall phone, company memory (one SQLite store per memory key), hybrid search, local SQLite profile store. | The `zylch` CLI binary, the on-disk profile directory, all business logic. |
-| `app/` | Electron + React frontend that embeds the engine via JSON-RPC over stdio. Three views: chat, tasks, emails. | The desktop UI, packaging via `electron-builder`, GitHub release pipeline. |
+| `app/` | Electron + React frontend using JSON-RPC over stdio for the local sidecar or Firebase-authenticated WSS for a hosted engine. Views include Setup, Settings, Tasks, Workspace and Email → Drafts. | The desktop UI, packaging via `electron-builder`, GitHub release pipeline. |
 | `docs/` | Monorepo-wide docs: things that span engine ↔ app or describe the repo as a whole. | Cross-cutting decisions, release process, IPC contracts. |
 
 Each subdir has its own `CLAUDE.md` and `docs/` (mirroring the three-tree

@@ -57,9 +57,8 @@ kernel first-contact bulk delivery remains outside this engine reply policy.
 Legacy task-orchestrator Gmail/Outlook modules remain unavailable; guarded call
 sites do not establish working OAuth provider integration.
 
-This policy certifies engine effects, not external mailbox actions. The installed
-v0.74.1 kernel review append remains outside the engine company lock. In the
-[mailbox candidate](../../../docs/mailbox-drafts.md), the kernel delegates
+This policy certifies engine effects, not external mailbox actions. Under the
+[mailbox contract](../../../docs/mailbox-drafts.md), the kernel delegates
 composition and every draft effect to the engine. The engine commits a body-free
 operation reservation before entering the company policy lock for source-bound
 creation or transmission. Sparse interactive edits retain the native source

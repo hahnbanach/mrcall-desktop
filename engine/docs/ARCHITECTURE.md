@@ -49,8 +49,8 @@ zylch/
 │   └── job_executor.py   # Background job runner (REPL mode)
 │
 ├── email/                # Archived email + native mailbox operations
-│   ├── gmail_auth.py     # Separate encrypted Gmail grant and PKCE
-│   ├── gmail_mailbox.py  # Native Gmail containers, mutation and Sent reads
+│   ├── imap_mailbox.py  # Primary mailbox drafts, recoverable Trash and Sent reads
+│   ├── imap_mailbox_smtp.py # One raw SMTP submission using the mailbox app password
 │   └── imap_client.py    # IMAP/SMTP client with auto-detect presets
 │
 ├── whatsapp/             # WhatsApp (neonize/whatsmeow)
@@ -172,14 +172,17 @@ zylch/
 
 ## Mailbox drafts
 
-The [mailbox candidate](../../docs/mailbox-drafts.md) uses Gmail native draft
-containers through `services/mailbox_drafts.py` and `email/gmail_mailbox.py`.
+The [mailbox contract](../../docs/mailbox-drafts.md) uses current IMAP draft
+identities through `services/mailbox_drafts.py` and `email/imap_mailbox.py`.
 Desktop, MCP, chat and kernel requests share those operations. SQLite stores
 body-free request identities in `storage/mailbox_operations.py`; it stores no
-editable draft copy. IMAP remains the synced archive reader. Scheduled direct
-replies use native `messages.send` without an intermediate draft. Migration
+editable draft copy. IMAP reads current conversations, drafts and Sent as well
+as the synced archive. SMTP sends the current saved MIME with an engine-generated
+Message-ID. Scheduled direct replies create no intermediate draft. Migration
 discards the legacy store and preserves uncertain sends without provider writes.
-The installed fleet remains dev7 until the separately verified cutover.
+Existing primary-mailbox app passwords provide authentication; Gmail OAuth is
+not required. Installed versions and remaining acceptance belong to
+[active context](active-context.md) and the governing delivery plan.
 
 ## Data Flow
 
@@ -205,11 +208,12 @@ User
 
 | Channel | Protocol | Implementation |
 |---------|----------|---------------|
-| Email | IMAP/SMTP and candidate native Gmail API | `zylch/email/imap_client.py`, `zylch/email/gmail_mailbox.py`; [mailbox contract](../../docs/mailbox-drafts.md) |
+| Email | Primary IMAP/SMTP uses profile `EMAIL_PASSWORD`. Additional IMAP synchronization uses encrypted stored mailbox passwords. | `zylch/email/mailboxes.py`, `zylch/email/imap_client.py`, `zylch/email/imap_mailbox.py`; [mailbox contract](../../docs/mailbox-drafts.md) |
 | WhatsApp | neonize (whatsmeow) | `zylch/whatsapp/client.py` — QR login, sync on demand |
 | MrCall | StarChat HTTP with Firebase identity | `zylch/tools/mrcall/starchat_firebase.py` |
 | Telegram | python-telegram-bot | `zylch/telegram/bot.py` — bot interface (long-polling) |
-| Calendar | CalDAV | Planned |
+| Google Calendar | Separate read-only OAuth grant | `zylch/rpc/google_actions.py` wires `google.calendar.connect` and `google.calendar.status`; [identity and consent](../../docs/cross-cutting-contracts.md#identity-firebase--added-2026-05-02) |
+| CalDAV calendar sync | CalDAV | Planned |
 
 ## Interfaces
 

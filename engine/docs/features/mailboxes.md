@@ -44,9 +44,10 @@ gets an active row keyed by that owner.
 storage filter. `build_imap_client(mailbox)` produces the IMAP client for
 one row: the primary from `EMAIL_PASSWORD` and the environment's hosts,
 any other from its decrypted `secret` and the row's hosts; both fail closed
-with `MailboxSecretError` when no password can be produced. The client
-factory caches one client per `(mailbox.id, credential_fingerprint)`, so a
-password change rebuilds the client.
+with `MailboxSecretError` when no password can be produced. Each factory call returns a fresh client with its own connection and lock.
+The caller owns disconnection. Mailbox draft facades therefore keep their
+absolute deadline and authenticated capabilities on a dedicated connection;
+concurrent callers do not reuse a cached client.
 
 ## Secrets
 
@@ -250,7 +251,14 @@ stamping each row with its owner's mailbox; recreates the indexes; carries
 the cursors into `email_sync_cursor_v2` joined on their owner's row, drops
 orphans and the v1 table. A file already in the new shape is left alone.
 
-Restore, when the migrated store must go back:
+The following schema-step restore applies only before later durable operation
+receipts or effects exist. Once mailbox operation receipts or journals exist,
+never replace the active database with an older backup or delete its sidecars.
+Use the writer-fenced forward-compatible recovery in the
+[mailbox migration contract](../../../docs/mailbox-draft-migration.md), preserving
+all original operation identities and uncertain outcomes.
+
+Restore for an eligible schema-only rollback, with all writers stopped:
 
 1. Stop the app or the daemon (`systemctl stop zylch-server@<uid>`).
 2. Delete `zylch.db-wal` and `zylch.db-shm` beside the file.

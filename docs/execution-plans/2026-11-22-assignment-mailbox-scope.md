@@ -46,5 +46,10 @@ schedules stay paused. Verify each process and listener, then read the exact
 production conversation through the clone RPC. Confirm a member-reply hold
 on real evidence and verify the separate ordinary-thread and restricted-mailbox
 cases without sending mail. The single source release carries package version
-`0.1.57.dev7+hosted20261122.mrcall`. For an operational rollback, restore
-each dev6 unit binding and check its live process and listener.
+`0.1.57.dev7+hosted20261122.mrcall`.
+
+The dev7 rollout's dev6 unit binding is a pre-retirement rollback reference.
+Today, stop writers and apply the [compatible rollback check](../mailbox-draft-migration.md#compatible-rollback)
+before any old-engine restart. The current profile receipt and journal state
+refuses dev6. A rollback must retain a compatible mailbox receipt reader and
+preserve the profile database.

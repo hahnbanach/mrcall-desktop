@@ -22,7 +22,7 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 
 ## Index
 
-- [Mailbox draft contract](mailbox-drafts.md) — shared engine operations, native Gmail identity, sending and replay; [legacy retirement](mailbox-draft-migration.md).
+- [Mailbox draft contract](mailbox-drafts.md) — shared engine operations, exact IMAP identity, SMTP sending and replay. The [brief](briefs/2026-11-23-mailbox-drafts.md) defines acceptance. The [mailbox delivery plan](execution-plans/2026-11-23-mailbox-drafts.md) records installed evidence and remaining acceptance. [Legacy retirement](mailbox-draft-migration.md) covers migration and rollback.
 
 - [Assignment reads in a multi-mailbox profile](briefs/2026-11-22-assignment-mailbox-scope.md) and their [delivery plan](execution-plans/2026-11-22-assignment-mailbox-scope.md).
 - [Stripe test installer](execution-plans/2026-10-16-stripe-test-installer.md) — isolated test candidate, source checks and unverified installed acceptance; [brief](briefs/2026-10-16-stripe-test-installer.md).
@@ -51,7 +51,7 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 - [Model comparison](evaluations/2026-09-13-openrouter-models.md) — blinded synthetic evidence and limitations.
 - [Actual-prompt comparison](evaluations/2026-09-15-real-engine-prompts.md) — K3/GLM source-grounded checks, availability and prompt corrections.
 
-- [Desktop setup to operator workspace](briefs/2026-09-10-desktop-to-operator-onboarding.md) — historical coding-agent delivery and remote design; current backend scope lives in the operator source/build contract.
+- [Desktop setup to operator workspace](briefs/2026-09-10-desktop-to-operator-onboarding.md) — historical coding-agent delivery and remote design. See [operator data flows](operator-data-flows.md) and the [mailbox draft contract](mailbox-drafts.md) for current backend scope.
 - [Desktop, MCP and daemon data flows](operator-data-flows.md) — current scoped backend flow and authority boundaries, with earlier prototype sequences kept as historical design.
 - [Chat approval isolation](briefs/2026-09-10-chat-approval-isolation.md) — scoped existing cross-client approval defect and acceptance criteria.
 - [`active-context.md`](active-context.md) — cross-cutting living snapshot: `State now` / `Unresolved` / `Next`, nothing else
@@ -103,5 +103,5 @@ anywhere in the repo):
 
 - [One build for every hosted engine](briefs/2026-11-19-one-hosted-engine-build.md) — how the united hosted package is composed and what it changes for each unit; its [execution plan](execution-plans/2026-11-19-one-hosted-engine-build.md) is superseded and keeps the per-unit procedures.
 
-- [Main is the hosted line](briefs/2026-11-20-main-is-the-hosted-line.md) — `main` carries the engine that runs in production, and a thread a member answered by hand returns to the operator after three days; [execution plan](execution-plans/2026-11-20-main-is-the-hosted-line.md) with the per-unit state, the release and each rollback.
+- [Main is the hosted line](briefs/2026-11-20-main-is-the-hosted-line.md) — hosted release policy and the three-day hold on a thread a member answered by hand. The [hosted-line plan](execution-plans/2026-11-20-main-is-the-hosted-line.md) records unit bindings and rollback at that delivery. The [mailbox delivery plan](execution-plans/2026-11-23-mailbox-drafts.md) records the installed mailbox candidate.
 - [Assignment mailbox diagnostics](briefs/2026-11-22-assignment-mailbox-diagnostics.md) and [verification plan](execution-plans/2026-11-22-assignment-mailbox-diagnostics.md) cover mailbox identification when a profile fails its membership check.
