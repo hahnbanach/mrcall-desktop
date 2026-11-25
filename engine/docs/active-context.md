@@ -9,9 +9,9 @@ are preserved verbatim in [active-context-archive.md](active-context-archive.md)
 ## State now
 
 The [mailbox draft implementation](../../docs/mailbox-drafts.md) is installed as
-`0.1.57.dev13+mailboximap20261124.mrcall` on all seven hosted engines. All 492
+`0.1.57.dev14+mailboximap20261125.mrcall` on all seven hosted engines. All 492
 package files, actual process UID/cwd/arguments and expected listeners match the
-immutable source `2e27f02e` release. Primary IMAP and raw SMTP use existing app
+immutable source `74f15a13` release. Primary IMAP and raw SMTP use existing app
 passwords; Firebase identity and Calendar OAuth remain separate. The new MCP
 lists the current mailbox and exposes explicit recoverable Trash and keyed send.
 
@@ -22,7 +22,7 @@ The migration publishes, deletes and sends zero provider messages. Both repeated
 migration and exact writer/schedule fences pass. Saved models, daily limits,
 profile configuration and parked voice are preserved.
 
-The source aggregate passes 398 checks on unchanged product bytes. Installed
+The dev14 focused aggregate passes 449 checks on unchanged product bytes. Installed
 MCP sending reads saved Gmail IMAP recipients and body. The original key and an
 accepted native RPC alias recover the same canonical operation and Message-ID
 after an actual Café service restart. Independent provider counts are one Sent,
@@ -77,21 +77,30 @@ approval and prior authenticated conversation requirements.
 
 ## Unresolved
 
-- The second Café tick on the same original and the first MrCall direct send
-  run on dev13 in a shared acceptance window. Their outcomes and quota,
-  provider and restoration receipts remain open.
-- Both-clone FULL, public provenance and Gmail web interaction remain open.
-  The original-17 order is complete with zero moves. Fourteen originals are
-  in recoverable Trash and three are unlocated.
+- Both Café ticks exit 0, examine the same original and retain one exact
+  byte-identical draft with zero sends. Corrected ordinary MrCall
+  `run-v3wrbl3l` is active on dev14 against the original without resubmission.
+  Its terminal provider, semantic reply and replay checks remain pending.
+- Strict provider structured reply output and separate generation recovery are
+  installed. Both gateway realms run `2bf3a56b` and serve the exact published
+  endpoint snapshot; free quote checks pass without inference. The failed
+  dev13 generation still returns its original uncertain identity, with no new
+  generation or mailbox effect. Both installed send-mode hold controls pass.
+- Both-clone FULL awaits successful ordinary MrCall; cumulative read equivalence,
+  provider oracle, fixed-template safety and paused launchers have evidence.
+  Public provenance and literal Gmail web remain open. The original-17 order
+  remains complete with zero moves, fourteen originals in recoverable Trash
+  and three unlocated.
 - Main's broad test tree and RPC contract checks have recorded pre-existing
   failures, including Qonto finance rules that no hosted unit runs. Candidate
   focused checks do not claim that broad baseline is repaired.
 - Six unit drop-ins sort after `tenant.conf`; reconcile returns 3. Profile
   changes or a base-checkout advance can restart the fleet without checking
   for a telephone call. DEBUG journal records include addresses.
-- Kernel selection retains two conversations per tick, current protected-original
-  proof and ordinary escalation holds. The second Café tick must select the
-  same inbound and preserve the draft created by the first.
+- Kernel selection retains two conversations per tick and ordinary holds. The
+  second Café tick identifies the same original and exact draft in bound review
+  and its final explanation, with zero workset selections. Its incomplete
+  Sent-body comparison does not establish clean existing-draft suppression.
 - One Café intake has a retained 177-second observation against a 180-second
   caller wait. Three support assignment projections remain unknown. Those
   historical causes are not established by this delivery.
@@ -108,9 +117,9 @@ approval and prior authenticated conversation requirements.
 
 ## Next
 
-1. Verify the two running ordinary outcomes and their provider evidence. Keep
-   recurring jobs suppressed during the window and restore both pause files
-   and the original cron after both runs finish.
+1. Verify the active ordinary support result, semantic reply and same-key
+   replay on dev14. Recheck installed MCP recovery and packaged Desktop.
+   Preserve exact cron and pause restoration after the bounded window.
 2. Complete the cumulative checks for both-clone FULL, Gmail web evidence,
    documentation and separate final review. Verify public provenance and all
    seven process identities after the published Desktop main reaches the

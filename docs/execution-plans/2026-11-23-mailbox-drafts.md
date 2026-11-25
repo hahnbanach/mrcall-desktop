@@ -60,13 +60,17 @@ They do not transfer provider coverage implicitly.
   restart, and independently matching Sent/received message.
 - [x] Installed Linux Desktop 0.1.57 default authentication and full restart.
 - [x] Durable binding and status recovery for a second key on the same canonical
-  send. Dev13 is installed on all seven engines. Authenticated RPC accepts the
+  send. Dev14 is installed on all seven engines; the recorded alias proof uses dev13. Authenticated RPC accepts the
   alias and actual post-restart RPC status and MCP recovery retain the original
   operation and Message-ID.
 - [x] First ordinary Café draft-mode tick and installed Linux Desktop opening
   of its exact native draft on dev13.
-- [ ] Second ordinary Café tick, first ordinary MrCall direct send, public
-  release and final review.
+- [x] Second ordinary Café tick examines the same original with one unchanged
+  draft and zero sends. Its incomplete Sent-body hold retains its qualification.
+- [x] Installed support hold controls preserve an edited draft and leave an
+  independently human-answered source alone, without generation or sending.
+- [ ] Successful corrected ordinary MrCall direct send, public release and
+  final installed review.
 - [ ] Gmail web verification of the controlled journey.
 
 ## Deployment boundary
@@ -74,20 +78,70 @@ They do not transfer provider coverage implicitly.
 The primary mailbox already supplies IMAP/SMTP credentials. Gmail OAuth consent
 is not a dependency. Current source removes the unreleased Gmail OAuth surface.
 The original API candidate and its 403 evidence remain historical artifacts.
-All seven hosted engines run immutable dev13. Both normal clones use the exact
+All seven hosted engines run immutable dev14 from `74f15a13`. Both normal clones use the exact
 local `v0.76.1` package at commit
 `6b5fa007c8c0fa98c0d5f5a05a76052eea3f3d0f`. Their FULL acceptance and public
 provenance remain required.
 
 Recurring schedules remain paused outside the bounded acceptance window. The
-current two ordinary ticks share one window with recurring cron suppressed and
-both pause files temporarily removed. Restore exact cron and both pause files
-after both runs finish. Launchers retain their configured USD 8 run caps and
+corrected ordinary MrCall run owns one bounded window with recurring cron
+suppressed. Its reviewed controller restores exact cron and both pause files
+after the native run and all owned descendants terminate. Launchers retain their configured USD 8 run caps and
 saved engine budgets. Migration requires stopped real writers,
 fresh state digest and read-only exact Sent proof; it restores no discarded
 draft and retransmits no uncertain operation.
 
 
+## Installed dev14 checkpoint — 2026-11-25
+
+All seven processes load `0.1.57.dev14+mailboximap20261125.mrcall` from exact
+source `74f15a135277c6a417eac2837f5cd8c5d01f3c18`. All 492 package files match
+SHA-256 `b11ae7d4eb25ab6ac7e9a69d7f4e3bd1546c55370a26c5d5fda96de8f10deaab`.
+The artifact passes 449 focused checks. Actual reviewed rollout preserves
+canonical receipts and aliases, generation and budget state, settings, caps,
+voice and exact scheduling state, with no provider effects or migration rerun.
+
+Both gateway realms run `2bf3a56b` with all 78 source/schema files matching.
+They serve published snapshot `ceba39dabf9c394c561a10eb96faf57402fa3e81d34588766dac98eb1498cabc`
+after supported restarts. Twelve authenticated free quote checks per realm pass
+with zero inference. Data commit `b7e2d960` changes only the snapshot and preserves
+the table, ranking policy and other public blobs. Exact provider capabilities
+and required structured output are bound in the approved quote wire.
+
+The two successful Café ticks retain their actual dev12/dev13 versions, same
+examined original, byte-identical draft and zero sends. Separate installed dev13
+hold controls preserve an edited draft and recognize an exact human reply
+before generation or dispatch. The corrected ordinary support run
+`run-v3wrbl3l` is active on dev14 against the same original, renewed without
+source resubmission. Full review is progressing; no successful delivery is
+claimed before terminal, independent provider and lead semantic checks.
+The failed earlier generation recovers its original uncertain identity on dev14
+without another model request or mailbox effect.
+
+Both normal clones still have exact local `v0.76.1`. The qualified read matrix,
+independent read-only IMAP oracle, historical fixed-template goldens, installed
+safety and actual paused ordinary launchers have evidence. BOTH FULL still
+requires successful corrected ordinary MrCall and independent sign-off.
+
+Stable ARM64 workflow `45533053445` succeeds on exact source `74f15a13`.
+The complete ZIP digest and CRC pass; the retained 249,606,782-byte DMG SHA-256
+is `cf82d0460f0f02efb27dafac985d1c9c53b799afd56778805d6dd97af45b9ccd`.
+Signing is observed. Apple's actual account-agreement refusal leaves it
+unnotarized. The public installer remains v0.1.56. This proves neither native
+Mac execution nor a new public release.
+
+Evidence is under `/home/mal/.local/share/mrcall-operational-evidence/2026-11-24/`:
+`mailbox-upgrade-dev14/run-20261125T033835231071Z/running-proof.json`,
+`mrcall-ordinary-dev14-20261125/`, `scheduled-hold-controls-20261125/`,
+`normal-full-read-matrix/` and `desktop-stable-dev14-release-assets/`.
+Post-upgrade MCP original/alias replay, packaged Linux draft opening, public
+kernel/installer provenance, literal Gmail web, documentation criticism and
+separate final installed review remain required. Pull the service checkout
+after every Desktop main push and verify the seven process bindings again.
+
+## Retained dev13 IMAP checkpoint — historical
+
+````markdown
 ## Installed IMAP checkpoint — 2026-11-25
 
 All seven hosted engines run `0.1.57.dev13+mailboximap20261124.mrcall` from
@@ -148,6 +202,8 @@ exit. Both-clone FULL includes retained and outstanding live read, dedup,
 degraded CRM, safety and fixed-template evidence in addition to the ordinary
 ticks. Literal Gmail web, public kernel and Desktop provenance, documentation
 criticism and a separate final installed review remain required.
+
+````
 
 ## Retained dev12 IMAP checkpoint — historical
 

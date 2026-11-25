@@ -73,6 +73,28 @@ Full-MIME source matching normalizes surrounding header whitespace and requires
 one nondefective Message-ID header on exactly one source message. Missing or
 ambiguous source identity refuses before generation.
 
+## Reply generation and recovery
+
+Reply generation requests the provider's strict JSON-schema format for one
+closed reply decision: plain-text draft or internal needs-review outcome.
+The full schema is included in bounded pricing and provider capability checks.
+The existing provider selection remains authoritative. MrCall bounded quotes
+refuse missing format capability before inference. Personal-provider paths send
+the strict format to the selected provider, which can refuse it remotely;
+OpenRouter requires the parameters and disables fallback. No route silently
+drops the format or selects another provider. A generation refusal precedes
+any mailbox draft or SMTP effect.
+
+The generation receipt and mailbox effect have distinct identities. Composition
+returns `generation_operation_id` for generation. A completed direct send exposes
+the mailbox receipt as `operation_id`. A completed draft exposes `draft_id` and
+`mailbox_operation`; its top-level `operation_id` remains the generation ID.
+New pre-mailbox generation failures use `failed_before_dispatch`. A retained
+older `uncertain` generation without a mailbox receipt recovers that same outcome
+without requiring a nonexistent receipt or calling the model again. Existing
+generation, budget reservation and mailbox send identities stay bound to their
+original request across restart.
+
 ## Campaign preparation
 
 `campaign.add_contact` and `campaign.update_contact` preserve ordinary campaign

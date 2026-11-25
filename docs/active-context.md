@@ -19,8 +19,8 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-All seven hosted engines run the immutable dev13 release from source
-`2e27f02e`. Actual process identities, arguments, listeners and all 492
+All seven hosted engines run the immutable dev14 release from source
+`74f15a13`. Actual process identities, arguments, listeners and all 492
 package files match. Both normal operator clones use the exact local
 `v0.76.1` artifact. Café Production is the routed operator MCP profile.
 
@@ -80,12 +80,23 @@ headless operator and direct kernel classifier controls; see
 
 ## Unresolved
 
-- The second Café tick on the same original and the first ordinary MrCall send
-  run on dev13 in one shared acceptance window. Recurring cron entries are
-  suppressed and the pause files are temporarily removed until both runs finish.
-- Both normal-clone FULL checks still need the cumulative read-only, dedup,
-  degraded CRM and remaining safety evidence. Gmail web interaction, public
-  installer/kernel provenance and separate final review also remain open.
+- Both ordinary Café ticks exit 0 and examine the same original, with one exact
+  draft and zero sends. The second's incomplete Sent-body hold is separate from
+  clean draft suppression. Both installed send-mode hold controls pass: edited
+  draft retained and exact human answer held before generation or dispatch.
+- The corrected ordinary support run `run-v3wrbl3l` is active on dev14 against
+  the same original without resubmission. Its terminal result, semantic received
+  reply, exact Sent and same-key replay remain pending. The failed dev13
+  generation retains its original uncertain identity and settled reservation.
+- Both gateway realms deploy `2bf3a56b` with 78 exact files and serve the published
+  snapshot after supported restarts. Twelve authenticated free quotes per realm
+  pass with zero inference. Data commit `b7e2d960` changes only the snapshot;
+  the model table and other public blobs remain unchanged. Installed dev14
+  preserves settings, caps, canonical receipts and accepted aliases.
+- Both-clone FULL awaits successful ordinary MrCall. Cumulative live-read,
+  independent provider oracle, fixed-template safety and paused-launcher checks
+  have qualified evidence. Gmail web, public installer/kernel provenance and
+  separate final review remain open.
 - Native automatic bootstrap, broad RPC parity, customer reply quality and full
   Desktop packaging retain the parent operator obligations. Historical MCP helper
   pairing does not establish wider kernel CLI or installed FULL acceptance.
@@ -99,8 +110,10 @@ headless operator and direct kernel classifier controls; see
 
 ## Next
 
-1. Verify both running launcher outcomes and provider evidence. Restore exact
-   recurring cron and both pause files after both runs finish.
+1. Verify the active ordinary support result, semantic received reply, exact
+   Sent and replay on dev14. Recheck the original MCP key, accepted alias and
+   packaged Linux draft opening after the upgrade. Preserve both Café proofs
+   and exact scheduling restoration.
 2. Complete both-clone FULL and Gmail web acceptance. Preserve the completed
    original-17 conditional result with its three unlocated identities.
 3. Complete documentation review, separate final installed review and public

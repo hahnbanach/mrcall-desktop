@@ -107,10 +107,14 @@ provider journals. A compatible release retains both receipt tables, resolves
 every accepted secondary request key to its original canonical operation and
 uses read-only Sent recovery for uncertain sends. It neither restores discarded
 draft rows nor repeats a possible dispatch. Dev12 cannot read these aliases and
-is incompatible once an alias is accepted. Keep dev13 or an alias-aware forward
-release available until reader/writer compatibility is verified by reopening
-the database and replaying both the original key and an accepted alias without
-another transmission.
+is incompatible once an alias is accepted. Dev13 supports aliases but cannot
+recover an uncertain generation that has no mailbox receipt. Dev14, or a
+forward release with both recovery contracts, is required for the current state.
+Preserve generation IDs, reservations and usage as well as mailbox receipts.
+Verify compatibility by reopening the database and replaying the original send
+key, an accepted alias and the retained pre-mailbox uncertain generation.
+Each returns its original identity without another inference or transmission;
+uncertainty does not authorize a new attempt.
 
 `rollback_check(writer_fence=assert_stopped)` refuses an old writer whenever the
 legacy journal is nonempty or unknown, any mailbox operation receipt exists, or

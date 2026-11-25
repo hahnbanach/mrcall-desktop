@@ -27,7 +27,7 @@ to the production build and a hashed 73-file runtime inventory. Closed-profile d
 Google-credential and restart cases also pass through the official SDK in Chromium.
 The same installed Linux app opens the first ordinary Café tick's exact draft
 (IMAP UID 2515) on dev13. Its closed-profile scan finds no persisted ID token.
-The stable Apple Silicon candidate keeps the app source and embeds dev13.
+The stable Apple Silicon candidate keeps the app source and embeds dev14. Its matching workflow, complete ZIP digest and CRC, DMG digest and signing steps pass. Notarization retains the actual Apple agreement refusal.
 
 Settings separates payment provider, model selection, daily allowance and bounded
 preparation controls. Saved keys belong to the active engine. Pending choices
@@ -42,9 +42,11 @@ artifact, hosted deployment and model state live in the
 
 ## Unresolved
 
-- The remaining ordinary launcher outcomes, both-clone FULL and literal Gmail
-  web checks belong to the governing HB plan. Public release, Mac execution
-  and independent validation of the signed, unnotarized DMG remain open.
+- The successful corrected ordinary support send, both-clone FULL and literal
+  Gmail web checks belong to the governing HB plan. Both Café examinations and
+  their unchanged draft are verified. The active corrected support run owns the bounded schedule window and exact restoration.
+  Public release, Mac execution and independent validation of the signed,
+  unnotarized DMG remain open.
 - Fresh-device Mac sign-in, personal-key entry, live PEC and the packaged Qonto
   provider comparison retain their existing acceptance owners.
 - Reopen Settings after a connection change to reload its catalog. Reloading

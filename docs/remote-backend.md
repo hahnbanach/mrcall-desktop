@@ -152,14 +152,14 @@ The model:
   profile's `downloads/` and `scratch/` folders on a hosted engine (M1, on
   `main` since `c2b3ca5`). All seven existing profiles run as `mc-…`, use
   derived company-store paths and have their own
-  egress enforcement. All seven run release
-  `/home/mrcalld/releases/hosted-engine-0.1.57.dev5-e1c1af32d0d0`, tag
-  `hosted-engine-0.1.57.dev5` on `main`. Six of them, production voice
-  included, take their command line from a drop-in that sorts after
-  `tenant.conf`, `<z…>-hosted-engine-20261120b.conf`, which sets `ExecStart`
-  to the release's interpreter and unsets `PYTHONPATH`; `create` refuses
-  such a unit, so the reconcile exits 3 for them. The personal mailbox unit
-  takes its interpreter from a tenant-exec declaration and passes `create`.
+  egress enforcement. Current immutable release identities and all seven
+  process bindings live in [the active context](active-context.md) and the
+  [mailbox delivery plan](execution-plans/2026-11-23-mailbox-drafts.md).
+  Six units, production voice included, retain command-line drop-ins that sort
+  after `tenant.conf`, set `ExecStart` to the release interpreter and unset
+  `PYTHONPATH`; `create` refuses such a unit, so reconcile exits 3 for them.
+  The personal mailbox unit takes its interpreter from a tenant-exec declaration
+  and passes `create`.
   The production voice unit runs without `--voice-config`, so without its
   telephone listener: with it the daemon exits at start while the voice
   admission is not ready.
@@ -599,9 +599,16 @@ private `MAILBOX_SECRET_KEY`; it is never provisioned or shared with company
 memory. Permit the configured IMAP hostname through that tenant's egress
 policy before testing the provider.
 
-Rollback requires stopping the affected unit, restoring the pre-migration
-profile backup through `restore_sqlite`, and restoring its previous release
-pin while retaining the sandbox. Post-backup local tasks and mail flags are
-lost; server mail can sync again. Company memory is a separate store and is
-not rolled back with the profile. See the mailbox contract for this data-loss
-window.
+Before mailbox-draft retirement, rollback of `0003_emails_mailbox` requires
+stopping the affected unit, restoring its pre-migration profile backup through
+`restore_sqlite`, and restoring its previous release pin while retaining the
+sandbox. Post-backup local tasks and mail flags are lost; server mail can sync
+again. Company memory is separate and is not rolled back with the profile.
+
+After mailbox-draft retirement, never overwrite the current profile database
+with that pre-migration backup. Follow the
+[mailbox migration contract](mailbox-draft-migration.md#compatible-rollback):
+preserve canonical send receipts, request aliases, uncertain generation IDs,
+reservations and usage. Retain a compatible dev14 or forward reader and writer.
+Discarded drafts stay discarded and uncertain inference or sending is not
+repeated.
