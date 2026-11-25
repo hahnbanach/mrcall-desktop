@@ -252,3 +252,56 @@ def test_explicit_controls_not_silently_overwritten(monkeypatch, controls):
     client._client.quote = lambda *a: pytest.fail("invalid controls reached quote")
     with pytest.raises(BudgetError):
         client.create_message_sync(messages=[{"role": "user", "content": "fixture"}], **controls)
+
+
+@pytest.mark.parametrize("model", [k3.MODEL, "z-ai/glm-5.2"])
+def test_strict_schema_reaches_selected_router_without_changing_route_or_spend_controls(ledger, model):
+    schema = {"type": "object", "properties": {"answer": {"type": "string"}},
+              "required": ["answer"], "additionalProperties": False}
+    form = {"type": "json_schema", "schema": schema}
+    seen = []
+
+    def reply(request):
+        body = json.loads(request.content)
+        seen.append(body)
+        assert body["model"] == model and body["provider"]["require_parameters"] is True
+        assert "tools" not in body and "tool_choice" not in body
+        if model == k3.MODEL:
+            assert request.url.path == "/api/v1/chat/completions"
+            assert body["max_tokens"] == 8192 and body["reasoning"] == {"effort": "max"}
+            assert body["response_format"] == {"type": "json_schema", "json_schema": {
+                "name": "structured_response", "strict": True, "schema": schema}}
+            return response()
+        assert request.url.path == "/api/v1/messages" and body["output_config"] == {"format": form}
+        return httpx.Response(200, json={"model": model, "stop_reason": "end_turn",
+            "content": [{"type": "text", "text": "fixture"}],
+            "usage": {"input_tokens": 10, "output_tokens": 2, "cost": "0.00002"}})
+
+    client = LLMClient("openrouter", api_key="fixture", model=model)
+    with httpx.Client(transport=httpx.MockTransport(reply)) as http:
+        client._client = OpenRouterClient("fixture", http_client=http)
+        client.create_message_sync(messages=[{"role": "user", "content": "fixture"}], output_config={"format": form})
+    assert len(seen) == 1 and budget_snapshot("fixture")["spent_usd"] == 0.00002
+
+
+@pytest.mark.parametrize("transport,model", [
+    ("direct", "claude-sonnet-4-5"), ("openrouter", "z-ai/glm-5.2"), ("openrouter", k3.MODEL),
+])
+def test_unpriced_output_options_stay_closed_and_schema_bytes_raise_the_hold(transport, model):
+    from zylch.llm.budget_pricing import request_bound as bound
+
+    payload = {"model": model, "max_tokens": 128, "messages": [{"role": "user", "content": "fixture"}]}
+    config = {}
+    if model == k3.MODEL:
+        payload["thinking"] = {"type": "adaptive"}
+        config["effort"] = "max"
+        payload["output_config"] = config
+    base_cost = bound(payload, transport)
+    schema = {"type": "object", "properties": {"answer": {"type": "string"}},
+              "required": ["answer"], "additionalProperties": False}
+    form = {"type": "json_schema", "schema": schema}
+    assert bound({**payload, "output_config": {**config, "format": form}}, transport) > base_cost
+    for invalid in ({"unknown": True}, {"format": {"type": "text"}},
+                    {"format": {**form, "extra": True}}, {"format": form, "unpriced": True}):
+        with pytest.raises(BudgetError):
+            bound({**payload, "output_config": {**config, **invalid}}, transport)

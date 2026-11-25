@@ -47,6 +47,7 @@ _ALLOWED = {
     "stop_sequences",
     "metadata",
     "service_tier",
+    "output_config",
 }
 
 
@@ -117,6 +118,14 @@ def _context_tokens(payload_bytes):
     return -(-payload_bytes // ADMISSION_BYTES_PER_TOKEN) + ADMISSION_PROTOCOL_TOKENS
 
 
+def output_schema(output_format):
+    if (not isinstance(output_format, dict) or set(output_format) != {"type", "schema"}
+            or output_format["type"] != "json_schema" or not isinstance(output_format["schema"], dict)
+            or output_format["schema"].get("type") != "object"):
+        raise BudgetError("AI paused: unsupported structured output format.")
+    return output_format["schema"]
+
+
 def request_bound(request, transport):
     """Return micro-USD hold; bytes + protocol allowance bound text input."""
     if transport == "openai_voice":
@@ -132,6 +141,11 @@ def request_bound(request, transport):
         )
     if set(request) - _ALLOWED:
         raise BudgetError("AI paused: request includes an unpriced option.")
+    if "output_config" in request:
+        config = request["output_config"]
+        if not isinstance(config, dict) or set(config) != {"format"}:
+            raise BudgetError("AI paused: request includes an unpriced output option.")
+        output_schema(config["format"])
     if request.get("service_tier", "standard_only") != "standard_only":
         raise BudgetError("AI paused: only standard service-tier pricing is supported.")
     model = request.get("model")

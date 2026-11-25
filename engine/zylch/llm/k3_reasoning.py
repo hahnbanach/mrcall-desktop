@@ -6,7 +6,7 @@ from decimal import ROUND_CEILING, Decimal
 from types import SimpleNamespace
 
 from . import openrouter_pricing as pricing
-from .budget_pricing import CONTEXT_WINDOW_TOKENS, BudgetError, _context_tokens
+from .budget_pricing import CONTEXT_WINDOW_TOKENS, BudgetError, _context_tokens, output_schema
 
 MODEL = "moonshotai/kimi-k3"
 OUTPUT_CAP = 8192
@@ -18,10 +18,12 @@ def validate_controls(request):
         raise BudgetError("K3 max reasoning requires default temperature 1.")
     if request.get("model") != MODEL:
         raise BudgetError("K3 reasoning controls require the exact K3 model.")
-    if request.get("thinking") != {"type": "adaptive"} or request.get("output_config") != {
-        "effort": "max"
-    }:
+    config = request.get("output_config")
+    if (request.get("thinking") != {"type": "adaptive"} or not isinstance(config, dict)
+            or config.get("effort") != "max" or set(config) - {"effort", "format"}):
         raise BudgetError("K3 supports only explicit adaptive/max reasoning.")
+    if "format" in config:
+        output_schema(config["format"])
     if type(request.get("max_tokens")) is not int or not 1 <= request["max_tokens"] <= OUTPUT_CAP:
         raise BudgetError("K3 reasoning requires an output cap within 8192 tokens.")
 
@@ -110,6 +112,10 @@ def chat_request(request):
         "provider": provider_policy(),
         "reasoning": {"effort": "max"},
     }
+    if "format" in source["output_config"]:
+        body["response_format"] = {"type": "json_schema", "json_schema": {
+            "name": "structured_response", "strict": True, "schema": source["output_config"]["format"]["schema"],
+        }}
     if source.get("tools"):
         translated = []
         for tool in source["tools"]:

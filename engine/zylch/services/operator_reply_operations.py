@@ -21,6 +21,32 @@ class ReplyRefusal(ValueError):
     pass
 
 
+_PRE_DISPATCH_REFUSALS = {
+    "structured_draft_required", "structured_reply_decision_required",
+    "incomplete_or_tool_generation_refused", "generation_response_too_large",
+    "bounded_plain_draft_body_required", "bounded_internal_review_required",
+    "reply_generation_provider_error", "reply_generation_budget_or_provider_refusal",
+    "authorized_context_changed", "current_instruction_versions_required", "exact_source_required",
+    "scheduled_answered", "scheduled_draft_exists", "profile_binding_changed",
+    "current_profile_mismatch", "published_identity_and_procedures_required",
+    "instructions_changed_before_private_commit", "correspondence_changed_before_private_commit",
+    "native_review_profile_mismatch", "native_review_source_scope_held",
+    "exact_authorized_mailbox_required", "exact_source_headers_required", "one_external_source_sender_required",
+    "exact_authorized_context_required", "generation_context_too_large", "bounded_thread_correspondence_required",
+    "exact_ordinary_thread_correspondence_required", "bounded_published_instruction_bundle_required",
+    "instruction_content_integrity", "instruction_revision_identity_required", "duplicate_instruction_path",
+    "locked_company_instruction_accessor_required", "locked_instruction_company_mismatch",
+    "operation_not_claimed_or_already_completed",
+}
+
+_PRE_DISPATCH_STAGES = {
+    "context": "reply_context_check_failed",
+    "generation": "reply_generation_failed",
+    "review": "reply_review_recording_failed",
+    "addressing": "reply_addressing_failed",
+}
+
+
 @dataclass(frozen=True)
 class ReviewRequired:
     reason: str
@@ -341,10 +367,12 @@ class ReplyOperations:
         if not claimed:
             return await self.recover(operation_id=operation, actor_binding=actor)
         token = _active.set((self, actor, operation, [False], context["source"], context["instructions"], context.get("correspondence")))
+        stage = "context"
         try:
             await self._acheck(actor)
             if await self._context(exact_source, instruction_versions, actor) != context:
                 raise ReplyRefusal("authorized_context_changed")
+            stage = "generation"
             if self.generator is None:
                 from .operator_reply_generation import generate
                 body = await generate(context, request_text)
@@ -352,27 +380,42 @@ class ReplyOperations:
                 body = await self.generator(context, request_text)
             if not isinstance(body, ReviewRequired) and (not isinstance(body, str) or not body.strip() or len(body.encode()) > 65536):
                 raise ReplyRefusal("bounded_plain_draft_body_required")
+            stage = "context"
             await self._acheck(actor)
             if await self._context(exact_source, instruction_versions, actor) != context:
                 raise ReplyRefusal("authorized_context_changed")
             if isinstance(body, ReviewRequired):
+                stage = "review"
                 await asyncio.to_thread(self._finish_review, actor, operation, context, body)
             else:
-                from .operator_reply_generation import persist
-                outcome = await asyncio.to_thread(persist, context["source"], body, actor,
+                from .operator_reply_generation import persist, reply_fields
+                stage = "addressing"
+                fields = reply_fields(context["source"], actor)
+                stage = "mailbox"
+                outcome = await asyncio.to_thread(persist, fields, body, actor,
                                                   request_key="prepare:" + operation, mode=self.mode)
                 await asyncio.to_thread(self._finish_mailbox, actor, operation, outcome, body)
             if not _active.get()[3][0]:
                 raise ReplyRefusal("native_draft_receipt_missing")
-        except BaseException:
-            from zylch.services.mailbox_drafts import MailboxDrafts
-            mailbox_attempt = MailboxDrafts(actor.mailbox_address).operation("prepare:" + operation)
+        except BaseException as error:
+            state, result = "uncertain", None
+            if stage in _PRE_DISPATCH_STAGES:
+                state = "failed_before_dispatch"
+                cause = _PRE_DISPATCH_STAGES[stage]
+                if isinstance(error, ReplyRefusal) and str(error) in _PRE_DISPATCH_REFUSALS:
+                    cause = str(error)
+                elif isinstance(error, asyncio.CancelledError):
+                    cause = "reply_operation_cancelled"
+                if stage == "context" and cause in {"scheduled_answered", "scheduled_draft_exists"}:
+                    state = cause.removeprefix("scheduled_")
+                result = _json({"cause": cause, "stage": stage, "effect_certainty": "not-dispatched"})
             with _transaction() as conn:
-                row = conn.execute(select(_operations).where(_operations.c.id == operation)).mappings().one()
-                if row["state"] == "running":
-                    conn.execute(update(_operations).where(_operations.c.id == operation).values(
-                        state="uncertain" if mailbox_attempt is not None or json.loads(row["reservation_ids"]) else "failed_before_dispatch", updated_at=time.time()))
-            raise
+                conn.execute(update(_operations).where(
+                    _operations.c.id == operation, *_where(actor), _operations.c.state.in_(("running", "uncertain")),
+                    _operations.c.executor == _process(), _operations.c.result.is_(None),
+                ).values(state=state, result=result, updated_at=time.time()))
+            if state == "uncertain" or not isinstance(error, Exception):
+                raise
         finally:
             _active.reset(token)
         return await self.recover(operation_id=operation, actor_binding=actor)
@@ -399,7 +442,11 @@ class ReplyOperations:
                 _operations.c.state.in_(("running", "uncertain")), _operations.c.result.is_(None),
             ).values(state="completed", result=_json(result), updated_at=time.time())).rowcount
             if changed != 1:
-                raise ReplyRefusal("operation_not_claimed_or_already_completed")
+                completed = conn.execute(select(_operations.c.result).where(
+                    _operations.c.id == operation, *_where(actor), _operations.c.state == "completed",
+                )).scalar_one_or_none()
+                if not completed or json.loads(completed).get("mailbox_operation") != result["mailbox_operation"]:
+                    raise ReplyRefusal("operation_not_claimed_or_already_completed")
         active = _active.get()
         if active is not None:
             active[3][0] = True
@@ -476,16 +523,25 @@ class ReplyOperations:
         from zylch.services.mailbox_drafts import MailboxDrafts
         mailbox = MailboxDrafts(actor.mailbox_address)
         current = None
-        if result is None and row["state"] in {"running", "uncertain"}:
-            # A crash may follow provider acceptance but precede the outer receipt.
-            # Recovery reads the original operation and never repeats generation.
-            recovered = await asyncio.to_thread(mailbox.recover, "prepare:" + row["id"])
-            if isinstance(recovered, dict) and recovered.get("ok"):
-                self.mode = payload.get("mode", "draft")
-                outcome = recovered.get("draft") or recovered.get("result") or recovered
-                if isinstance(outcome, dict):
+        if result is None and row["state"] == "running":
+            result = {"cause": "reply_operation_in_progress", "effect_certainty": "unknown"}
+        if result is None and row["state"] == "uncertain":
+            mailbox_key = "prepare:" + row["id"]
+            receipt = await asyncio.to_thread(mailbox.operation, mailbox_key)
+            if receipt is None:
+                result = {"cause": "reply_operation_without_mailbox_receipt", "effect_certainty": "unknown"}
+            elif receipt["stage"] == "reserved":
+                result = {"cause": "mailbox_operation_reserved", "effect_certainty": "unknown",
+                          "message_id": receipt["message_id"], "mailbox_operation_id": receipt["id"]}
+            else:
+                recovered = await asyncio.to_thread(mailbox.recover, mailbox_key)
+                if recovered.get("ok"):
+                    self.mode = payload.get("mode", "draft")
+                    outcome = recovered.get("draft") or recovered.get("result") or recovered
                     await asyncio.to_thread(self._finish_mailbox, actor, row["id"], outcome)
                     return await self.recover(actor_binding=actor, operation_id=row["id"])
+                result = {key: recovered[key] for key in ("cause", "effect_certainty", "message_id") if key in recovered}
+                result["mailbox_operation_id"] = receipt["id"]
         if result is not None and result.get("draft_id"):
             current_row = await asyncio.to_thread(mailbox.get, result["draft_id"])
             current = {"exists": current_row is not None}

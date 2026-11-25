@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "zylch"
-version = "0.1.57.dev13+mailboximap20261124.mrcall"
+version = "0.1.57.dev14+mailboximap20261125.mrcall"
 description = "Intelligent sales agent"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -152,6 +152,14 @@ class LLMResponse:
         return getattr(self._raw, "stop_reason", None)
 
     @property
+    def complete_text_only(self) -> bool:
+        blocks = getattr(self._raw, "content", None)
+        return (self.original_stop_reason == "end_turn" and not getattr(self._raw, "refusal", None)
+                and isinstance(blocks, list)
+                and all(getattr(block, "type", None) == "text" and isinstance(getattr(block, "text", None), str)
+                        and not getattr(block, "refusal", None) for block in blocks))
+
+    @property
     def content(self) -> List[Union[TextBlock, ToolUseBlock]]:
         return self._content
 
@@ -417,15 +425,17 @@ class LLMClient:
         for key, value in kwargs.items():
             request_kwargs[key] = value
 
-        if model_name == "moonshotai/kimi-k3" and self.transport in ("openrouter", "proxy") and not ({"thinking", "output_config"} & request_kwargs.keys()):
-            # The combined cap includes reasoning: worker-specific final-output
-            # limits would starve the tested max-effort configuration. Apply
-            # before quote/hash/admission so every reserved byte is dispatched.
-            request_kwargs.update(
-                thinking={"type": "adaptive"}, output_config={"effort": "max"}, max_tokens=8192
-            )
         if model_name == "moonshotai/kimi-k3" and self.transport in ("openrouter", "proxy"):
             from .k3_reasoning import request_bound as validate_k3
+            config = request_kwargs.get("output_config")
+            if "thinking" not in request_kwargs and (
+                "output_config" not in request_kwargs or (isinstance(config, dict) and set(config) == {"format"})
+            ):
+                # The combined cap includes reasoning: worker-specific final-output
+                # limits would starve the tested max-effort configuration. Apply
+                # before quote/hash/admission so every reserved byte is dispatched.
+                request_kwargs.update(thinking={"type": "adaptive"},
+                                      output_config={**(config or {}), "effort": "max"}, max_tokens=8192)
             validate_k3(request_kwargs)
 
         publication_guard.constrain_request(request_kwargs)

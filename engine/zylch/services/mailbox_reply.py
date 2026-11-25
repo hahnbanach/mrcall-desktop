@@ -6,6 +6,11 @@ from .operator_reply_operations import ActorBinding, ReplyOperations, ReplyRefus
 from . import operator_reply_origin as origin
 
 
+def _outcome(operation, mode):
+    return {**operation, "ok": operation["state"] in {"completed", "needs_review", "answered", "draft_exists"}, "mode": mode,
+            **(operation.get("result") or {}), "generation_operation_id": operation["operation_id"]}
+
+
 async def compose(owner, params, notify):
     from zylch.email import mailboxes
     from zylch.storage.storage import Storage
@@ -89,8 +94,7 @@ async def compose(owner, params, notify):
                 and prior["instructions"] != params["instruction_versions"]):
             raise ReplyRefusal("request_key_payload_conflict")
         result = await service.recover(actor_binding=actor, operation_id=admitted["id"])
-        saved = result.get("result") or {}
-        return {**result, "ok": result["state"] in {"completed", "needs_review"}, "mode": mode, **saved}
+        return _outcome(result, mode)
     if params.get("recover_only") is True:
         raise ReplyRefusal("reply_operation_not_found")
     docs = await asyncio.to_thread(documents)
@@ -113,6 +117,4 @@ async def compose(owner, params, notify):
                 return {"ok": True, "state": cause.removeprefix("scheduled_"),
                         "request_key": params["request_key"], "effect_certainty": "not-dispatched"}
             raise
-    saved = result.get("result") or {}
-    return {**result, "ok": result["state"] in {"completed", "needs_review"},
-            "mode": mode, **saved}
+    return _outcome(result, mode)
