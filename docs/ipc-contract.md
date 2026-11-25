@@ -814,7 +814,8 @@ use current mailbox state and never insert an editable engine draft row.
 
 Get and mutation handlers return a safe refusal or receipt result for mailbox
 service failures. The [send and replay contract](mailbox-drafts.md#sending-and-replay)
-describes the installed dev13 alias binding. Recovery and status return the
+describes the alias binding first verified on dev13 and rechecked through
+public MCP on installed dev15. Recovery and status return the
 canonical operation, Message-ID and original request key. Status reads the
 mailbox without mutating it. MCP refuses an unbound key on an already retired
 handle before creating any binding.

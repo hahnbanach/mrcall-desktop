@@ -85,6 +85,17 @@ OpenRouter requires the parameters and disables fallback. No route silently
 drops the format or selects another provider. A generation refusal precedes
 any mailbox draft or SMTP effect.
 
+The provider enforces the structural schema. Local review validation requires
+a nonblank reason of at most 4,096 UTF-8 bytes and up to 20 genuine missing facts,
+each nonblank and at most 1,024 UTF-8 bytes. A policy escalation may have zero
+missing facts. The prompt states these bounds; malformed values remain held
+with fixed field/constraint causes and no generated text in the failure record.
+Generation usage can already be settled when a local validation fails.
+`failed_before_dispatch` and its `not-dispatched` certainty describe mailbox
+effects, not the absence of a billed model call. Recovery preserves both facts
+and never repeats that original generation. See the
+[compatible reader requirement](mailbox-draft-migration.md#compatible-rollback).
+
 The generation receipt and mailbox effect have distinct identities. Composition
 returns `generation_operation_id` for generation. A completed direct send exposes
 the mailbox receipt as `operation_id`. A completed draft exposes `draft_id` and
@@ -213,5 +224,6 @@ Café service restart with the original key and an alias accepted through RPC.
 Packaged Linux Desktop restores authentication after restart and opens the
 exact draft produced by the first ordinary Café tick. The
 [Desktop delivery plan](execution-plans/2026-11-23-mailbox-drafts.md) records
-that evidence and the outstanding ordinary outcomes, both normal-clone FULL
-checks, public release provenance, Gmail web verification and final review.
+the completed ordinary launcher outcomes and their version scopes, pending
+Café personal-K3 positive preparation, both normal-clone FULL checks, public
+release provenance, Gmail web verification and final review.

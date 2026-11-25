@@ -9,9 +9,9 @@ are preserved verbatim in [active-context-archive.md](active-context-archive.md)
 ## State now
 
 The [mailbox draft implementation](../../docs/mailbox-drafts.md) is installed as
-`0.1.57.dev14+mailboximap20261125.mrcall` on all seven hosted engines. All 492
+`0.1.57.dev15+mailboximap20261125.mrcall` on all seven hosted engines. All 492
 package files, actual process UID/cwd/arguments and expected listeners match the
-immutable source `74f15a13` release. Primary IMAP and raw SMTP use existing app
+immutable source `96f02460` release. Primary IMAP and raw SMTP use existing app
 passwords; Firebase identity and Calendar OAuth remain separate. The new MCP
 lists the current mailbox and exposes explicit recoverable Trash and keyed send.
 
@@ -22,7 +22,7 @@ The migration publishes, deletes and sends zero provider messages. Both repeated
 migration and exact writer/schedule fences pass. Saved models, daily limits,
 profile configuration and parked voice are preserved.
 
-The dev14 focused aggregate passes 449 checks on unchanged product bytes. Installed
+The dev15 focused aggregate passes 461 checks on unchanged product bytes. Installed
 MCP sending reads saved Gmail IMAP recipients and body. The original key and an
 accepted native RPC alias recover the same canonical operation and Message-ID
 after an actual Café service restart. Independent provider counts are one Sent,
@@ -30,7 +30,7 @@ one received and zero drafts. A new, unbound MCP key on the retired handle
 refuses before binding. Strict singleton full-MIME source headers are normalized.
 Both normal clones use immutable local kernel `v0.76.1`. The first ordinary
 Café tick on dev12 prepares one draft with zero replies. Packaged Linux Desktop
-opens that exact draft on dev13. See the
+opens that exact draft on dev15. See the
 [leaf plan](../../docs/execution-plans/2026-11-23-mailbox-drafts.md) for exact
 evidence and remaining acceptance.
 
@@ -75,18 +75,19 @@ three other Café profiles retain USD 5/day and enabled, unpaused preparation.
 No release check authorizes backlog generation. Support outbound calls retain
 approval and prior authenticated conversation requirements.
 
+The two ordinary Café examinations retain one byte-identical draft and zero
+sends. Ordinary support delivery retains one received/Sent reply, zero drafts
+and unchanged same-key recovery and accounting. Both scheduled hold controls
+pass without generation or dispatch. Strict provider structured output and
+separate generation recovery are installed. The old failed support generation
+remains fenced. Both gateway realms serve the exact published endpoint snapshot
+on `2bf3a56b`; free quote checks use no inference. The delivery plan binds each
+result to its observed version.
+
 ## Unresolved
 
-- Both Café ticks exit 0, examine the same original and retain one exact
-  byte-identical draft with zero sends. Corrected ordinary MrCall
-  `run-v3wrbl3l` is active on dev14 against the original without resubmission.
-  Its terminal provider, semantic reply and replay checks remain pending.
-- Strict provider structured reply output and separate generation recovery are
-  installed. Both gateway realms run `2bf3a56b` and serve the exact published
-  endpoint snapshot; free quote checks pass without inference. The failed
-  dev13 generation still returns its original uncertain identity, with no new
-  generation or mailbox effect. Both installed send-mode hold controls pass.
-- Both-clone FULL awaits successful ordinary MrCall; cumulative read equivalence,
+- Both-clone FULL awaits canonical Café personal-K3 generation and final
+  judgment; cumulative read equivalence,
   provider oracle, fixed-template safety and paused launchers have evidence.
   Public provenance and literal Gmail web remain open. The original-17 order
   remains complete with zero moves, fourteen originals in recoverable Trash
@@ -117,9 +118,9 @@ approval and prior authenticated conversation requirements.
 
 ## Next
 
-1. Verify the active ordinary support result, semantic reply and same-key
-   replay on dev14. Recheck installed MCP recovery and packaged Desktop.
-   Preserve exact cron and pause restoration after the bounded window.
+1. Complete canonical Café personal-K3 preparation and replay on dev15.
+   Ordinary support and post-upgrade MCP/Desktop checks pass. Preserve exact
+   restored cron and pauses, existing drafts and every uncertain operation.
 2. Complete the cumulative checks for both-clone FULL, Gmail web evidence,
    documentation and separate final review. Verify public provenance and all
    seven process identities after the published Desktop main reaches the

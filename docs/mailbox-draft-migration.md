@@ -108,12 +108,20 @@ every accepted secondary request key to its original canonical operation and
 uses read-only Sent recovery for uncertain sends. It neither restores discarded
 draft rows nor repeats a possible dispatch. Dev12 cannot read these aliases and
 is incompatible once an alias is accepted. Dev13 supports aliases but cannot
-recover an uncertain generation that has no mailbox receipt. Dev14, or a
-forward release with both recovery contracts, is required for the current state.
+recover an uncertain generation that has no mailbox receipt. Dev14 supports both alias and pre-mailbox-generation recovery contracts.
+The current policy-only review state additionally requires dev15 as below.
 Preserve generation IDs, reservations and usage as well as mailbox receipts.
+Dev15 also accepts a policy-only review with a nonblank reason and an empty
+`missing_facts` list. Once such a review is recorded, dev14 cannot recover it
+through its older constructor. Keep dev15 or a forward reader with that contract.
+The installed database already contains a policy-only review with zero missing
+facts. Its compatible rollback target is dev15 or a verified forward reader.
+The earlier pre-review dev14 rollback condition no longer applies. No rollback
+restores an old database or rewrites a review to satisfy an older reader.
 Verify compatibility by reopening the database and replaying the original send
-key, an accepted alias and the retained pre-mailbox uncertain generation.
-Each returns its original identity without another inference or transmission;
+key, an accepted alias, the retained pre-mailbox uncertain generation and a
+policy-only review with zero missing facts. Each returns its original identity
+without another inference or transmission;
 uncertainty does not authorize a new attempt.
 
 `rollback_check(writer_fence=assert_stopped)` refuses an old writer whenever the

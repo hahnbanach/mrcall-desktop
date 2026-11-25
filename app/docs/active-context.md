@@ -26,8 +26,8 @@ Linux desktop. Its root-owned packaged bundle has seven compiled files identical
 to the production build and a hashed 73-file runtime inventory. Closed-profile disk scans find neither actual ID token. Password,
 Google-credential and restart cases also pass through the official SDK in Chromium.
 The same installed Linux app opens the first ordinary Café tick's exact draft
-(IMAP UID 2515) on dev13. Its closed-profile scan finds no persisted ID token.
-The stable Apple Silicon candidate keeps the app source and embeds dev14. Its matching workflow, complete ZIP digest and CRC, DMG digest and signing steps pass. Notarization retains the actual Apple agreement refusal.
+(IMAP UID 2515) on dev15. Its closed-profile scan finds no persisted ID token.
+The retained dev14 Apple Silicon artifact has verified ZIP and DMG digests, full CRC and runner signing evidence. Its notarization is refused for the Apple agreement. The source-matching dev15 ARM64 dispatch succeeds. Its complete ZIP hash and CRC and the 249,567,884-byte DMG hash are verified; runner signing passes and Apple refuses notarization for the account agreement.
 
 Settings separates payment provider, model selection, daily allowance and bounded
 preparation controls. Saved keys belong to the active engine. Pending choices
@@ -42,10 +42,11 @@ artifact, hosted deployment and model state live in the
 
 ## Unresolved
 
-- The successful corrected ordinary support send, both-clone FULL and literal
-  Gmail web checks belong to the governing HB plan. Both Café examinations and
-  their unchanged draft are verified. The active corrected support run owns the bounded schedule window and exact restoration.
-  Public release, Mac execution and independent validation of the signed,
+- The corrected ordinary support send and both Café examinations pass.
+  Post-upgrade public MCP recovery and packaged Linux opening preserve their
+  original objects. Canonical personal-K3 verification, both-clone FULL and
+  literal Gmail web remain with the governing HB plan. Recurring pauses and
+  cron are restored. Public release, Mac execution and independent validation of the signed,
   unnotarized DMG remain open.
 - Fresh-device Mac sign-in, personal-key entry, live PEC and the packaged Qonto
   provider comparison retain their existing acceptance owners.

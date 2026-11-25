@@ -65,9 +65,11 @@ The repo has three parallel doc trees, mirroring the three index files. Each tre
 - [`execution-plans/`](execution-plans/) — workstreams that span both subsystems, one file each, `status:` in the frontmatter
 - `.doc-profile` — doc-harness configuration (leaf mode, `AGENTS.md` as the project index and managed v9 harness entry point)
 
-The release pipeline (tag-driven matrix, signing, notarization,
-electron-builder quirks) is documented inside
-[`execution-plans/release-and-rename-l2.md`](execution-plans/release-and-rename-l2.md).
+The current installer matrix, tag/dispatch publication, signing and notarization
+rules live in the [installer workflow](../.github/workflows/release.yml).
+The [mailbox delivery plan](execution-plans/2026-11-23-mailbox-drafts.md) records
+actual release evidence. The [April release/rename plan](execution-plans/release-and-rename-l2.md)
+retains its historical matrix and naming decisions.
 
 Engine-side and app-side counterparts (worth knowing about from
 anywhere in the repo):

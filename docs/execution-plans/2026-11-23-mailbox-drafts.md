@@ -60,7 +60,7 @@ They do not transfer provider coverage implicitly.
   restart, and independently matching Sent/received message.
 - [x] Installed Linux Desktop 0.1.57 default authentication and full restart.
 - [x] Durable binding and status recovery for a second key on the same canonical
-  send. Dev14 is installed on all seven engines; the recorded alias proof uses dev13. Authenticated RPC accepts the
+  send. Dev15 is installed on all seven engines; the recorded alias proof uses dev13. Authenticated RPC accepts the
   alias and actual post-restart RPC status and MCP recovery retain the original
   operation and Message-ID.
 - [x] First ordinary Café draft-mode tick and installed Linux Desktop opening
@@ -69,8 +69,9 @@ They do not transfer provider coverage implicitly.
   draft and zero sends. Its incomplete Sent-body hold retains its qualification.
 - [x] Installed support hold controls preserve an edited draft and leave an
   independently human-answered source alone, without generation or sending.
-- [ ] Successful corrected ordinary MrCall direct send, public release and
-  final installed review.
+- [x] Successful corrected ordinary MrCall direct send with received/Sent,
+  semantic, same-key recovery and accounting verification.
+- [ ] Public release and final installed review.
 - [ ] Gmail web verification of the controlled journey.
 
 ## Deployment boundary
@@ -78,21 +79,106 @@ They do not transfer provider coverage implicitly.
 The primary mailbox already supplies IMAP/SMTP credentials. Gmail OAuth consent
 is not a dependency. Current source removes the unreleased Gmail OAuth surface.
 The original API candidate and its 403 evidence remain historical artifacts.
-All seven hosted engines run immutable dev14 from `74f15a13`. Both normal clones use the exact
+All seven hosted engines run immutable dev15 from `96f02460`. Both normal clones use the exact
 local `v0.76.1` package at commit
 `6b5fa007c8c0fa98c0d5f5a05a76052eea3f3d0f`. Their FULL acceptance and public
 provenance remain required.
 
-Recurring schedules remain paused outside the bounded acceptance window. The
-corrected ordinary MrCall run owns one bounded window with recurring cron
-suppressed. Its reviewed controller restores exact cron and both pause files
-after the native run and all owned descendants terminate. Launchers retain their configured USD 8 run caps and
+Recurring schedules remain paused outside bounded acceptance windows. The
+corrected ordinary MrCall run completes with exact cron and both pause files
+restored and no owned descendants remaining. Launchers retain their configured USD 8 run caps and
 saved engine budgets. Migration requires stopped real writers,
 fresh state digest and read-only exact Sent proof; it restores no discarded
 draft and retransmits no uncertain operation.
 
 
-## Installed dev14 checkpoint — 2026-11-25
+## Installed dev15 checkpoint — 2026-11-25 05:49 UTC
+
+All seven hosted engines run immutable `0.1.57.dev15+mailboximap20261125.mrcall`
+from `96f02460bab9f0c9909ed663ae07cfa5c8a075dd`. Their 492 product files match
+SHA-256 `70a55a907ee5287be5a574260d5a13178e79eb974ed8c653d474f25efa5a3dba`.
+The reviewed artifact passes 461 cases and seven real service-user imports.
+All 109 retained dependency distributions and 11,740 vendor files remain exact,
+including SDK 1.8.0. The failed permission-only packaging attempt is retained;
+the verified artifact has readable immutable modes. Source and fleet reviews
+are independently approved. Actual activation exits zero and restores exact
+cron and pauses. Settings, budgets, parked voice, original operations and
+accounting are preserved, with no migration or provider effects.
+
+The actual proof is `mailbox-upgrade-dev15/run-20261125T054855731472Z/running-proof.json`
+under the November 24 private evidence root. Its SHA-256 is
+`c9f4b95b72f46437d571c3da19a3c81dcc2c8d4b6f0eeeabefebe7c15fda05a8`.
+Post-switch public MCP original-key and accepted-alias replays retain the
+original canonical receipt and Message-ID with one Sent, one received and zero
+drafts. Packaged Linux Desktop 0.1.57 opens the unchanged first Café draft
+UID 2515/UIDVALIDITY 6. The closed-home scan checks 734 files without matching
+the observed ID token. The packet is `post-dev15-mcp-desktop-verification-20261125/`.
+
+Café generation `af047ec8-ead2-40c4-a94f-c01ca8fd849e` records a valid review
+with zero missing facts, one settled USD 0.027780 usage and zero mailbox effects.
+Its assessment conflicts with the only verified controlled original. The saved source, sole
+correspondence and offline request reconstruction contain the correct controlled
+original; no local response cache is used. Actual transmitted HTTP digest and
+provider generation ID are unavailable. A model error and upstream association
+cannot be distinguished. Unverified generated identities/text are excluded
+from acceptance evidence. The source-selection code has no demonstrated defect.
+The normal authenticated clarification on that same verified original ends in
+`needs_review` as generation `a4369dda-a712-4e99-aaeb-152968ca107c`. Its one settled
+USD 0.037419 usage has 7,107 input and 1,490 output tokens. Provider observations
+find no draft or outgoing reply; all previous objects and accounting remain
+unchanged. This review accepts the reference and total but asks for proof of
+the protected-original exception. The model context contains source,
+correspondence and published rules, without the kernel's typed discovery receipt.
+The distinct request does not change registry, model, policy or caps and submits
+no SMTP. Its 17-file terminal manifest is
+`522b5b13d22989229a53abfc9bd1b4b37b6ba3e369825494ec581aa0eb390767`.
+Read-only diagnosis confirms a conservative review with the kernel verification
+receipt absent from the model context. Positive preparation/replay remain open. Old operations
+and charges remain terminal and intact. Literal Gmail client acceptance and
+public release remain open.
+
+The source-matching ordinary ARM64 dispatch `45554892753` succeeds on exact
+`96f02460`. Its installer embeds sidecar artifact 14995826319; installer artifact
+14995891640 has ZIP SHA-256
+`ab7472bf6151558856d23ecbf56270be9239d9df7e9afc0b4bd2132faccb2257`.
+Full ZIP CRC passes. Its sole 249,567,884-byte DMG has SHA-256
+`1061af5f3a9870d2560f19eeb0b33ee5f32a62f9bba00f89a88d96e47fe889d8`.
+Runner distribution signing succeeds. Apple refuses notarization with the
+agreement-related HTTP 403; the workflow's signed fallback remains qualified.
+This dispatch does not attach a release. All three source-bound RPC, memory
+boundary and kernel-journey CI workflows succeed. Actual public-tag publication,
+anonymous asset verification and native Mac execution remain separate.
+The durable receipt is `desktop-stable-dev15-dispatch-evidence/source15-evidence.json`
+under the private evidence root, SHA-256 `67e3b77ebf7da09a4877e217e6ea83ecd62761066cbd58137a119df035c4beab`.
+
+## Retained dev14 checkpoint — historical
+
+### Forward review-validation repair
+
+The canonical, provider-verified and registered Café test reaches K3 once. Its
+generation `f4e9cc9a-cfb6-4654-b6f5-b3fb801225c1` ends with
+`bounded_internal_review_required`, one settled USD 0.026759 usage and zero
+mailbox effects. The original response is not retained, so its exact invalid
+field and semantic reason are unknown. The same deployed schema admits empty
+fact lists and blank strings that the local review constructor rejects with one
+opaque cause. `not-dispatched` describes the mailbox action, not model accounting.
+
+Dev15 repairs this boundary without changing mailbox admission or dispatch.
+A justified policy escalation may have no missing facts. Its nonblank reason
+and every supplied fact retain bounded UTF-8 validation; malformed values remain
+held with safe field/constraint diagnostics. The prompt states the local bounds.
+The provider-supported structural schema and deployed gateway remain unchanged.
+String byte bounds remain local; the [provider schema limitations](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)
+do not support general string-length or array-maximum constraints.
+
+The source milestone review precedes an immutable dev15 artifact and fresh
+seven-engine rollout review. Preserve every old operation and settled charge,
+all canonical receipts and aliases, settings, budgets, cron, pauses and voice.
+Run no migration or automatic inference retry. The positive continuation uses
+the same verified original without another SMTP submission and a distinct
+explicit request after the repaired release is installed. Its original failed
+request remains terminal. Independent provider, semantic and same-key accounting
+checks, post-upgrade MCP/Desktop checks and the public-release gates remain required.
 
 All seven processes load `0.1.57.dev14+mailboximap20261125.mrcall` from exact
 source `74f15a135277c6a417eac2837f5cd8c5d01f3c18`. All 492 package files match
@@ -111,17 +197,20 @@ and required structured output are bound in the approved quote wire.
 The two successful Café ticks retain their actual dev12/dev13 versions, same
 examined original, byte-identical draft and zero sends. Separate installed dev13
 hold controls preserve an edited draft and recognize an exact human reply
-before generation or dispatch. The corrected ordinary support run
-`run-v3wrbl3l` is active on dev14 against the same original, renewed without
-source resubmission. Full review is progressing; no successful delivery is
-claimed before terminal, independent provider and lead semantic checks.
+before generation or dispatch. Corrected ordinary support run `run-v3wrbl3l`
+exits zero on dev14 against the original without source resubmission. Independent
+IMAP finds one matching Sent and received reply, with zero drafts. The lead reads
+the received body and verifies its reference and sum 416. Same-key recovery and
+recount preserve generation, send receipt, Message-ID, reservation, usage, tokens
+and costs. The ordinary run reports USD 2.3511234 under its USD 8 cap; its direct
+reply usage estimates USD 0.022551. These are distinct accounting scopes.
 The failed earlier generation recovers its original uncertain identity on dev14
 without another model request or mailbox effect.
 
 Both normal clones still have exact local `v0.76.1`. The qualified read matrix,
 independent read-only IMAP oracle, historical fixed-template goldens, installed
 safety and actual paused ordinary launchers have evidence. BOTH FULL still
-requires successful corrected ordinary MrCall and independent sign-off.
+requires canonical Café personal-K3 preparation on dev14 and independent sign-off.
 
 Stable ARM64 workflow `45533053445` succeeds on exact source `74f15a13`.
 The complete ZIP digest and CRC pass; the retained 249,606,782-byte DMG SHA-256
@@ -134,8 +223,11 @@ Evidence is under `/home/mal/.local/share/mrcall-operational-evidence/2026-11-24
 `mailbox-upgrade-dev14/run-20261125T033835231071Z/running-proof.json`,
 `mrcall-ordinary-dev14-20261125/`, `scheduled-hold-controls-20261125/`,
 `normal-full-read-matrix/` and `desktop-stable-dev14-release-assets/`.
-Post-upgrade MCP original/alias replay, packaged Linux draft opening, public
-kernel/installer provenance, literal Gmail web, documentation criticism and
+Post-upgrade public MCP original/alias replay and packaged Linux draft opening
+pass. The exact original message, UID 2515/UIDVALIDITY 6 draft and accounting
+remain intact. The closed-home scan checks 734 files without a match for the
+observed ID token. These proofs are in `post-dev14-mcp-desktop-verification-20261125/`.
+Public kernel/installer provenance, literal Gmail web, documentation criticism and
 separate final installed review remain required. Pull the service checkout
 after every Desktop main push and verify the seven process bindings again.
 

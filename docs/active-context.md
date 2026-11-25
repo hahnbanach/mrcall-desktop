@@ -19,8 +19,8 @@ what is *current*, targeting ≤ ~120 lines.
 
 ## State now
 
-All seven hosted engines run the immutable dev14 release from source
-`74f15a13`. Actual process identities, arguments, listeners and all 492
+All seven hosted engines run the immutable dev15 release from source
+`96f02460`. Actual process identities, arguments, listeners and all 492
 package files match. Both normal operator clones use the exact local
 `v0.76.1` artifact. Café Production is the routed operator MCP profile.
 
@@ -35,7 +35,7 @@ databases have completed internal draft retirement with zero provider mutations.
 
 Packaged Linux Desktop 0.1.57 restores hosted identity with refresh-only
 Firebase persistence and opens the exact first Café tick's native draft
-(UID 2515) on dev13. The first ordinary tick passes on dev12 and kernel
+(UID 2515) on dev15. The first ordinary tick passes on dev12 and kernel
 `v0.76.1` with one exact selection, one draft and zero replies. Closed-home
 scans find no persisted ID token. Independent
 Gmail IMAP edits and MCP sending have one matching Sent and received message.
@@ -78,22 +78,18 @@ keeps engine provider, model, budget and preparation controls separate from
 headless operator and direct kernel classifier controls; see
 [setup](operator-setup.md#ai-execution-and-controls).
 
+The two ordinary Café examinations retain one exact draft and zero sends.
+MrCall's ordinary send has one verified received/Sent reply, zero drafts and
+stable same-key recovery. Separate installed controls retain a human-edited draft
+and hold a human-answered source before generation. Both gateway realms run
+`2bf3a56b` with the exact published endpoint snapshot; free quote checks have
+zero inference. Their evidence and recorded versions remain in the delivery plan.
+The old failed support generation stays fenced.
+
 ## Unresolved
 
-- Both ordinary Café ticks exit 0 and examine the same original, with one exact
-  draft and zero sends. The second's incomplete Sent-body hold is separate from
-  clean draft suppression. Both installed send-mode hold controls pass: edited
-  draft retained and exact human answer held before generation or dispatch.
-- The corrected ordinary support run `run-v3wrbl3l` is active on dev14 against
-  the same original without resubmission. Its terminal result, semantic received
-  reply, exact Sent and same-key replay remain pending. The failed dev13
-  generation retains its original uncertain identity and settled reservation.
-- Both gateway realms deploy `2bf3a56b` with 78 exact files and serve the published
-  snapshot after supported restarts. Twelve authenticated free quotes per realm
-  pass with zero inference. Data commit `b7e2d960` changes only the snapshot;
-  the model table and other public blobs remain unchanged. Installed dev14
-  preserves settings, caps, canonical receipts and accepted aliases.
-- Both-clone FULL awaits successful ordinary MrCall. Cumulative live-read,
+- Both-clone FULL awaits the canonical Café personal-K3 preparation and final
+  independent judgment. Cumulative live-read,
   independent provider oracle, fixed-template safety and paused-launcher checks
   have qualified evidence. Gmail web, public installer/kernel provenance and
   separate final review remain open.
@@ -110,10 +106,10 @@ headless operator and direct kernel classifier controls; see
 
 ## Next
 
-1. Verify the active ordinary support result, semantic received reply, exact
-   Sent and replay on dev14. Recheck the original MCP key, accepted alias and
-   packaged Linux draft opening after the upgrade. Preserve both Café proofs
-   and exact scheduling restoration.
+1. Complete the canonical Café personal-K3 preparation and replay on dev15.
+   Ordinary support delivery and post-upgrade MCP original/alias recovery and
+   packaged Linux draft opening pass. Preserve both Café examinations and
+   exact restored scheduling state.
 2. Complete both-clone FULL and Gmail web acceptance. Preserve the completed
    original-17 conditional result with its three unlocated identities.
 3. Complete documentation review, separate final installed review and public
